@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwasthaSetu</title>
+    <script>
+      (function () {
+        var resizeObserverErrRE1 = /ResizeObserver loop completed with undelivered notifications\.?/;
+        var resizeObserverErrRE2 = /ResizeObserver loop limit exceeded\.?/;
+        window.addEventListener(
+          'error',
+          function (e) {
+            if (
+              e && e.message &&
+              (resizeObserverErrRE1.test(e.message) || resizeObserverErrRE2.test(e.message))
+            ) {
+              e.stopImmediatePropagation();
+            }
+          },
+          true
+        );
+        window.addEventListener(
+          'unhandledrejection',
+          function (e) {
+            var reason = e && e.reason ? String(e.reason) : '';
+            if (
+              reason &&
+              (resizeObserverErrRE1.test(reason) || resizeObserverErrRE2.test(reason))
+            ) {
+              e.preventDefault();
+            }
+          }
+        );
+      })();
+    </script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+
+    <script type="module" src="/client/App.tsx"></script>
+  </body>
+</html>
