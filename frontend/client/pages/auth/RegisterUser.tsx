@@ -655,18 +655,18 @@ export default function Register() {
           className="hidden lg:flex lg:w-2/5 bg-gradient-to-br from-yellow-50 to-green-50 items-center justify-center p-0 relative overflow-hidden"
         >
           <div className="absolute inset-0 w-full h-full">
-            <img 
-              src="/images/Gemini_Generated_Image_uwnah8uwnah8uwna.png" 
-              alt="Wellness healthcare illustration" 
+            <img
+              src="/images/Gemini_Generated_Image_uwnah8uwnah8uwna.png"
+              alt="Wellness healthcare illustration"
               className="w-full h-full object-cover object-center"
-              style={{ 
-                height: '100%', 
+              style={{
+                height: '100%',
                 width: '100%',
                 minHeight: '100vh'
               }}
             />
           </div>
-          
+
           {/* Optional overlay content */}
           <div className="relative z-10 max-w-sm text-center px-8">
             <h2 className="text-2xl font-light text-green-900 mb-4 font-serif">
