@@ -26,7 +26,7 @@ const Button = ({ children, className = "", variant = "primary", ...props }) => 
     ghost: "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
     success: "bg-green-600 text-white hover:bg-green-700 hover:shadow-lg hover:-translate-y-0.5"
   };
-
+  
   return (
     <motion.button
       whileHover={{ scale: props.disabled ? 1 : 1.02 }}
@@ -157,7 +157,7 @@ export default function RegisterDoctor() {
       // Registration successful - show success message and redirect to login page
       console.log('Doctor registration successful:', response.data);
       setSuccess(true);
-
+      
       // Show success message and redirect to login
       setTimeout(() => {
         window.location.assign("/login?role=doctor&registered=true");
@@ -165,9 +165,9 @@ export default function RegisterDoctor() {
 
     } catch (err: any) {
       console.error("Doctor registration error:", err);
-
+      
       let errorMessage = "An unexpected error occurred. Please try again.";
-
+      
       if (err.response) {
         // Server responded with error status
         errorMessage = err.response.data?.message || `Server error: ${err.response.status}`;
@@ -178,7 +178,7 @@ export default function RegisterDoctor() {
         // Something else happened
         errorMessage = err.message || errorMessage;
       }
-
+      
     } finally {
       setIsLoading(false);
     }
@@ -195,12 +195,12 @@ export default function RegisterDoctor() {
           className="hidden lg:flex lg:w-2/5 bg-gradient-to-br from-gray-100 to-gray-50 items-center justify-center p-0 relative overflow-hidden"
         >
           <div className="absolute inset-0 w-full h-full">
-            <img
-              src="/images/image2.png"
-              alt="Healthcare professional illustration"
+            <img 
+              src="/images/Gemini_Generated_Image_uwnah8uwnah8uwna.png" 
+              alt="Healthcare professional illustration" 
               className="w-full h-full object-cover object-center"
-              style={{
-                height: '100%',
+              style={{ 
+                height: '100%', 
                 width: '100%',
                 minHeight: '100vh'
               }}
@@ -274,7 +274,7 @@ export default function RegisterDoctor() {
                     <div className="border-b border-gray-100 pb-4">
                       <h3 className="text-base font-medium text-gray-900 mb-4">Personal Information</h3>
                     </div>
-
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <motion.div
                         variants={fieldVariants}

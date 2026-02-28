@@ -52,8 +52,8 @@ export default function Index() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: index * 0.1, ease: "easeOut" }}
                   className={`relative px-1 py-2 text-sm font-medium transition-colors duration-200 ${item.active
-                    ? 'text-green-900'
-                    : 'text-green-700/70 hover:text-green-900'
+                      ? 'text-green-900'
+                      : 'text-green-700/70 hover:text-green-900'
                     }`}
                 >
                   {item.name}
@@ -136,8 +136,8 @@ export default function Index() {
                   key={item.name}
                   onClick={() => scrollToSection(item.id)}
                   className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors duration-200 ${item.active
-                    ? 'bg-green-50 text-green-900'
-                    : 'text-green-700/70 hover:bg-green-50 hover:text-green-900'
+                      ? 'bg-green-50 text-green-900'
+                      : 'text-green-700/70 hover:bg-green-50 hover:text-green-900'
                     }`}
                 >
                   {item.name}
@@ -253,7 +253,7 @@ export default function Index() {
               className="w-full max-w-6xl px-4 sm:px-6 lg:px-8 -mt-8 lg:-mt-12"
             >
               <img
-                src="/images/image6.png"
+                src="/images/1759052846626.png"
                 alt="Wellness healthcare illustration"
                 className="w-full h-auto object-cover scale-125"
               />
