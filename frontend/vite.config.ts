@@ -21,9 +21,21 @@ export default defineConfig({
       allow: ["."],
     },
     proxy: {
+      '/api/ai': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      '/api/recipe': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      '/api/diet': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
       '/api': {
-        target: 'http://localhost:8000', // Your backend server
-        changeOrigin: true, // Recommended for virtual hosts
+        target: 'http://localhost:5000',
+        changeOrigin: true,
       },
     },
   },

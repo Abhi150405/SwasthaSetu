@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import PatientVerification from "@/components/doctor/dietPlan/PatientVerification";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAppState } from "@/context/app-state";
+import axios from "axios";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -27,6 +29,7 @@ import {
   Zap,
   Droplet,
   Info,
+  Loader2,
 } from "lucide-react";
 import {
   Table,
@@ -61,6 +64,7 @@ export default function DoctorRecipeGenerator() {
   const patientId = searchParams.get("patientId") || "";
   const patientName = searchParams.get("patientName") || "";
   const dosha = searchParams.get("dosha") || "";
+  const initialMealName = searchParams.get("mealName") || "";
 
   const [fetchedName, setFetchedName] = useState<string | null>(
     patientName ? decodeURIComponent(patientName) : null,
@@ -68,8 +72,9 @@ export default function DoctorRecipeGenerator() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(!!patientId);
   const [patientQuery, setPatientQuery] = useState<string>(patientName || "");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const [mealName, setMealName] = useState("");
+  const [mealName, setMealName] = useState(initialMealName);
 
   type Recipe = {
     name: string;
@@ -97,55 +102,48 @@ export default function DoctorRecipeGenerator() {
     if (match) {
       setFetchedName(
         match.patientName ||
-          (patientName ? decodeURIComponent(patientName) : "Patient"),
+        (patientName ? decodeURIComponent(patientName) : "Patient"),
       );
       setFetchError(null);
+      setConfirmed(true);
     } else if (q || patientId) {
       setFetchError("No patient found. Try full ID or part of the name.");
     }
-  }, [patientId, patientName, patientQuery, requests]);
+  }, [patientId, patientName, patientQuery, requests, initialMealName]);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (initialMealName && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [initialMealName]);
 
   // Patient selection handled via PatientVerification component
 
-  const macros = (kcal: number) => ({
-    protein: Math.round((kcal * 0.2) / 4),
-    carbs: Math.round((kcal * 0.55) / 4),
-    fat: Math.round((kcal * 0.25) / 9),
-  });
+  const onGenerate = async (nameToUse?: string) => {
+    const targetMeal = nameToUse || mealName.trim();
+    if (!confirmed || !targetMeal) return;
 
-  const generateSingle = (meal: string): Recipe => {
-    const base = 400 + Math.floor(Math.random() * 300);
-    return {
-      name: meal,
-      calories: base,
-      ...macros(base),
-      vitamins: ["A", "B", "C"],
-      ayur: {
-        rasa: "Madhura",
-        virya: "Ushna",
-        vipaka: "Madhura",
-        guna: ["Sattvic", "Light"],
-      },
-      ingredients: [
-        `${meal} base ingredient`,
-        "Seasonal vegetables",
-        "Spices (cumin, turmeric, coriander)",
-        "Ghee or oil",
-        "Herbs (coriander/parsley)",
-      ],
-      steps: [
-        "Prepare and wash ingredients.",
-        "Heat pan and temper spices.",
-        `Add ingredients to create ${meal}.`,
-        "Simmer until cooked and flavors blend.",
-        "Garnish and serve warm.",
-      ],
-    };
-  };
+    setIsLoading(true);
+    try {
+      const response = await axios.post("/api/recipe/generate", {
+        mealName: targetMeal,
+        patientName: fetchedName,
+        dosha: dosha
+      }, { withCredentials: true });
 
-  const onGenerate = () => {
-    if (!confirmed || !mealName.trim()) return;
-    setRecipe(generateSingle(mealName.trim()));
+      if (response.data.success) {
+        setRecipe(response.data.data);
+        toast.success("AI Recipe Generated!");
+      } else {
+        toast.error("Failed to generate recipe");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Error connecting to AI service");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -251,6 +249,7 @@ export default function DoctorRecipeGenerator() {
                     <div className="relative flex-1">
                       <Utensils className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
+                        ref={searchInputRef}
                         className="pl-10"
                         placeholder="Meal name"
                         value={mealName}
@@ -261,11 +260,21 @@ export default function DoctorRecipeGenerator() {
                       />
                     </div>
                     <Button
-                      onClick={onGenerate}
-                      className="gap-2 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 transition-all"
+                      onClick={() => onGenerate()}
+                      disabled={isLoading}
+                      className="gap-2 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 transition-all min-w-[160px]"
                     >
-                      <Zap className="h-4 w-4" />
-                      Generate Recipe
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="h-4 w-4" />
+                          Generate Recipe
+                        </>
+                      )}
                     </Button>
                   </div>
                   {!confirmed && (

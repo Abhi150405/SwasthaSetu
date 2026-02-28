@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+google-generativeai
+langchain
+langchain-google-genai
+langchain-community
+python-dotenv
+motor
+bcrypt
+pyjwt
+python-multipart

@@ -79,7 +79,7 @@ export default function DoctorPatients() {
         currentUserId: currentUser?.id,
         allRequests: requests.map(r => ({ id: r.id, doctorId: r.doctorId, status: r.status, patientName: r.patientName }))
       });
-      
+
       return requests.filter(
         (r) => r.doctorId === doctorProfileId && r.status === "accepted",
       );
@@ -281,8 +281,11 @@ export default function DoctorPatients() {
                     {filtered.map((patient) => (
                       <TableRow key={patient.id} className="border-b border-gray-100 hover:bg-transparent">
                         <TableCell className="px-6 py-4">
-                          <div className="flex items-center space-x-3">
-                            <Avatar className="h-10 w-10">
+                          <div
+                            className="flex items-center space-x-3 cursor-pointer group"
+                            onClick={() => navigate(`/doctor/patients/${patient.id}`)}
+                          >
+                            <Avatar className="h-10 w-10 group-hover:ring-2 group-hover:ring-blue-500 transition-all">
                               <AvatarFallback className="bg-gray-100 text-gray-700 font-medium">
                                 {patient.patientName
                                   ?.split(" ")
@@ -292,7 +295,7 @@ export default function DoctorPatients() {
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <div className="font-medium text-gray-900">
+                              <div className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
                                 {patient.patientName || `Patient ${patient.userId}`}
                               </div>
                               <div className="text-sm text-gray-500 flex items-center">
@@ -324,12 +327,12 @@ export default function DoctorPatients() {
                         <TableCell className="px-6 py-4 text-right">
                           <div className="flex justify-end space-x-2">
                             <button
-                              className="border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm"
+                              className="border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm whitespace-nowrap"
                               onClick={() =>
                                 navigate(`/doctor/patients/${patient.id}`)
                               }
                             >
-                              View
+                              View Profile
                             </button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -342,9 +345,15 @@ export default function DoctorPatients() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-48">
                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem>View Profile</DropdownMenuItem>
-                                <DropdownMenuItem>Message</DropdownMenuItem>
-                                <DropdownMenuItem>View History</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/doctor/patients/${patient.id}`)}>
+                                  View Profile
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/doctor/messages?patientId=${patient.id}`)}>
+                                  Message
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/doctor/patients/${patient.id}?tab=history`)}>
+                                  View History
+                                </DropdownMenuItem>
                                 <DropdownMenuItem className="text-red-600">
                                   Remove
                                 </DropdownMenuItem>
@@ -363,8 +372,11 @@ export default function DoctorPatients() {
                 {filtered.map((patient) => (
                   <div key={patient.id} className="p-4">
                     <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3 flex-1">
-                        <Avatar className="h-12 w-12">
+                      <div
+                        className="flex items-center space-x-3 flex-1 cursor-pointer group"
+                        onClick={() => navigate(`/doctor/patients/${patient.id}`)}
+                      >
+                        <Avatar className="h-12 w-12 group-hover:ring-2 group-hover:ring-blue-500 transition-all">
                           <AvatarFallback className="bg-gray-100 text-gray-700 font-medium">
                             {patient.patientName
                               ?.split(" ")
@@ -374,7 +386,7 @@ export default function DoctorPatients() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 truncate">
+                          <div className="font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
                             {patient.patientName || `Patient ${patient.userId}`}
                           </div>
                           <div className="text-sm text-gray-500 flex items-center mt-1">
@@ -396,10 +408,10 @@ export default function DoctorPatients() {
                           Active
                         </Badge>
                         <button
-                          className="border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm"
+                          className="border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm whitespace-nowrap"
                           onClick={() => navigate(`/doctor/patients/${patient.id}`)}
                         >
-                          View
+                          View Profile
                         </button>
                       </div>
                     </div>

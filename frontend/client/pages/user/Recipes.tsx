@@ -4,12 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Leaf, ChefHat, Clock, Utensils, Flame, Droplets, LeafyGreen, Soup } from "lucide-react";
+import { Leaf, ChefHat, Clock, Utensils, Flame, Droplets, LeafyGreen, Soup, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppState } from "@/context/app-state";
+import axios from "axios";
+import { toast } from "sonner";
 
 export default function Recipes() {
+  const { userProfile } = useAppState();
   const [mealName, setMealName] = useState("");
-  
+  const [isLoading, setIsLoading] = useState(false);
+
   type Recipe = {
     name: string;
     calories: number;
@@ -24,45 +29,29 @@ export default function Recipes() {
 
   const [recipe, setRecipe] = useState<Recipe | null>(null);
 
-  const macros = (kcal: number) => ({
-    protein: Math.round((kcal * 0.2) / 4),
-    carbs: Math.round((kcal * 0.55) / 4),
-    fat: Math.round((kcal * 0.25) / 9),
-  });
-
-  const generateSingle = (meal: string): Recipe => {
-    const base = 400 + Math.floor(Math.random() * 300);
-    return {
-      name: meal,
-      calories: base,
-      ...macros(base),
-      vitamins: ["A", "B", "C"],
-      ayur: {
-        rasa: "Madhura",
-        virya: "Ushna",
-        vipaka: "Madhura",
-        guna: ["Sattvic", "Light"],
-      },
-      ingredients: [
-        `${meal} base ingredient`,
-        "Seasonal vegetables",
-        "Spices (cumin, turmeric, coriander)",
-        "Ghee or oil",
-        "Herbs (coriander/parsley)",
-      ],
-      steps: [
-        "Prepare and wash ingredients.",
-        "Heat pan and temper spices.",
-        `Add ingredients to create ${meal}.`,
-        "Simmer until cooked and flavors blend.",
-        "Garnish and serve warm.",
-      ],
-    };
-  };
-
-  const onGenerate = () => {
+  const onGenerate = async () => {
     if (!mealName.trim()) return;
-    setRecipe(generateSingle(mealName.trim()));
+
+    setIsLoading(true);
+    try {
+      const response = await axios.post("/api/recipe/generate", {
+        mealName: mealName.trim(),
+        patientName: userProfile?.name || "Patient",
+        dosha: userProfile?.dosha || "Balanced"
+      }, { withCredentials: true });
+
+      if (response.data.success && response.data.data) {
+        setRecipe(response.data.data);
+        toast.success("Ayurvedic Recipe Generated!");
+      } else {
+        toast.error("Failed to generate recipe");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Error connecting to AI service");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -91,12 +80,19 @@ export default function Recipes() {
                 onKeyDown={(e) => e.key === 'Enter' && onGenerate()}
               />
             </div>
-            <Button 
-              onClick={onGenerate} 
-              className="bg-amber-600 hover:bg-amber-700 text-white py-5 px-6 transition-colors"
-              disabled={!mealName.trim()}
+            <Button
+              onClick={onGenerate}
+              className="bg-amber-600 hover:bg-amber-700 text-white py-5 px-6 transition-colors min-w-[170px]"
+              disabled={isLoading || !mealName.trim()}
             >
-              Generate Recipe
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Generating...
+                </>
+              ) : (
+                "Generate Recipe"
+              )}
             </Button>
           </div>
         </CardContent>

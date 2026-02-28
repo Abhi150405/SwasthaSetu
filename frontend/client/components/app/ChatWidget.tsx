@@ -23,6 +23,8 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Camera, MessageCircle, Mic, MicOff, Send, Volume2, VolumeX } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { useAppState } from "@/context/app-state";
 
 type ChatMessage = {
@@ -36,24 +38,26 @@ type ChatMessage = {
 const TypewriterText: React.FC<{ text: string; speed?: number }> = ({ text, speed = 30 }) => {
   const [displayText, setDisplayText] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);
-  
+
   useEffect(() => {
     if (currentIndex < text.length) {
       const timeout = setTimeout(() => {
         setDisplayText(prev => prev + text[currentIndex]);
         setCurrentIndex(prev => prev + 1);
       }, speed);
-      
+
       return () => clearTimeout(timeout);
     }
   }, [currentIndex, text, speed]);
-  
+
   return <>{displayText}</>;
 };
 
 export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
   mode = "floating",
 }) => {
+  const navigate = useNavigate();
+  const { currentUser, userProfile, doctorProfile, markMealTaken, updateWater } = useAppState();
   const isFloating = mode === "floating";
   const [open, setOpen] = useState<boolean>(() => {
     if (!isFloating) return true;
@@ -81,17 +85,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
       ts: Date.now() - 42000,
     },
   ]);
-  
-  // Sequential responses for the chat bot
-  const sequentialResponses = [
-    "Hey Dr.doom what can I do for you...",
-    "The patient dashboard for Neha Gupta is now open and visible on the screen.\nIs there anything else I can do for you, Dr. Doom?",
-    "The weekly diet plan for Neha Gupta has been generated and now you can modify or save it for them.\nIs there any further action required of me, Doctor?",
-    "The diet plan has been successfully exported to a PDF. It is now available to share with Neha."
-  ];
-  
-  const [currentResponseIndex, setCurrentResponseIndex] = useState(0);
-  const { markMealTaken, updateWater } = useAppState();
+
   const endRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -102,7 +96,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
       const x = parseInt(localStorage.getItem("app:chat:x") || "");
       const y = parseInt(localStorage.getItem("app:chat:y") || "");
       if (!Number.isNaN(x) && !Number.isNaN(y)) return { x, y };
-    } catch {}
+    } catch { }
     return { x: 24, y: 24 };
   });
 
@@ -116,11 +110,11 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const transcriptRef = useRef<string>("");
   const [wasVoiceInput, setWasVoiceInput] = useState(false);
-  
+
   // Text-to-speech state
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speechSynthesisRef = useRef<SpeechSynthesis | null>(null);
-  
+
   // Working indicator state
   const [isWorking, setIsWorking] = useState(false);
 
@@ -132,7 +126,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
     if (!isFloating) return;
     try {
       localStorage.setItem("app:chatOpen", open ? "1" : "0");
-    } catch {}
+    } catch { }
   }, [open, isFloating]);
 
   useEffect(() => {
@@ -152,7 +146,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
     try {
       localStorage.setItem("app:chat:x", String(pos.x));
       localStorage.setItem("app:chat:y", String(pos.y));
-    } catch {}
+    } catch { }
   }, [pos, isFloating]);
 
   const onMouseDownHeader = (e: React.MouseEvent) => {
@@ -258,7 +252,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.lang = 'en-US';
-    
+
     console.log('Starting speech recognition...');
 
     recognition.onresult = (event) => {
@@ -266,7 +260,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
       transcriptRef.current = transcript;
       setInput(transcript);
       console.log('Speech recognition result:', transcript);
-      
+
       // Auto-send immediately when we get the result
       setTimeout(() => {
         if (transcript.trim()) {
@@ -292,7 +286,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
     recognition.onend = () => {
       setIsListening(false);
       console.log('Speech recognition ended');
-      
+
       // Fallback auto-send if not already sent from onresult
       setTimeout(() => {
         const currentInput = input.trim();
@@ -305,7 +299,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
     };
 
     recognitionRef.current = recognition;
-    
+
     try {
       recognition.start();
       setIsListening(true);
@@ -358,90 +352,80 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
     speechSynthesisRef.current.speak(utterance);
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
     const text = input.trim();
-    
-    // If not voice input, reset the voice input flag
-    if (!wasVoiceInput) {
-      setWasVoiceInput(false);
-    }
-    
-    setMessages((m) => [...m, { role: "user", text, ts: Date.now() }]);
+
+    // Add user message to UI
+    const now = Date.now();
+    setMessages((m) => [...m, { role: "user", text, ts: now }]);
     setInput("");
-
-    const t = text.toLowerCase();
-    console.log("User input:", text);
-    console.log("Lowercase input:", t);
-    
-    let reply = "Noted. How else can I help?";
-    
-    // Special case: greetings trigger the first response
-    if (t.includes("hi") || t.includes("hello") || t.includes("hey") || t.includes("hii")) {
-      if (currentResponseIndex === 0) {
-        reply = sequentialResponses[0];
-        setCurrentResponseIndex(1);
-        console.log("Greeting detected - starting sequence with first response");
-      }
-    }
-    // Check for sequential response triggers - more flexible detection
-    else if (t.includes("sequence") || t.includes("next") || t.includes("continue") || 
-        t.includes("start") || t.includes("begin") || t.includes("go") || 
-        t.includes("response") || t.includes("dr") || t.includes("doctor") ||
-        t.includes("doom") || t.includes("neha")) {
-      console.log("Sequential response triggered");
-      console.log("Current index:", currentResponseIndex);
-      console.log("Total responses:", sequentialResponses.length);
-      
-      if (currentResponseIndex < sequentialResponses.length) {
-        reply = sequentialResponses[currentResponseIndex];
-        console.log("Reply set to:", reply);
-        setCurrentResponseIndex(prev => {
-          console.log("Updating index from", prev, "to", prev + 1);
-          return prev + 1;
-        });
-      } else {
-        reply = "All sequential responses have been completed. Starting over from the beginning.";
-        setCurrentResponseIndex(0);
-        console.log("Resetting index to 0");
-      }
-    } else if (t.includes("reset") || t.includes("start over")) {
-      reply = "Sequential responses reset. Starting from the beginning.";
-      setCurrentResponseIndex(0);
-      console.log("Manual reset - index set to 0");
-    } else if (t.includes("water")) {
-      updateWater(250);
-      reply = "Logged 250ml water. Keep hydrating!";
-    } else if (
-      t.includes("ate my lunch") ||
-      t.includes("lunch done") ||
-      t.includes("meal done")
-    ) {
-      markMealTaken();
-      reply =
-        "Great! I marked your lunch as taken. Want a light herbal tea later?";
-    } else if (t.includes("tip") || t.includes("advice")) {
-      reply =
-        "Choose warm, cooked meals. Avoid iced drinks. Ginger and cumin can aid digestion.";
-    }
-
-    // Show working indicator immediately
     setIsWorking(true);
-    
-    // After 2 seconds, show the actual response
-    setTimeout(() => {
-      const botMessage = { role: "bot" as const, text: reply, ts: Date.now() };
-      setMessages((m) => [...m, botMessage]);
-      
-      setIsWorking(false);
-      
-      // Only speak the bot response if the input was voice
-      if (wasVoiceInput) {
-        speakText(reply);
-        // Reset voice input flag after speaking
-        setWasVoiceInput(false);
+
+    // Stop speech if it was ongoing
+    if (speechSynthesisRef.current && isSpeaking) {
+      speechSynthesisRef.current.cancel();
+    }
+
+    try {
+      const patientContext = {
+        name: currentUser?.name,
+        role: currentUser?.role,
+        dosha: userProfile?.dosha || currentUser?.dosha,
+        profile: currentUser?.role === 'patient' ? userProfile : null,
+        doctorInfo: currentUser?.role === 'doctor' ? doctorProfile : null
+      };
+
+      const response = await axios.post("/api/ai/ask", {
+        question: text,
+        patientContext
+      });
+
+      if (response.data.success) {
+        let reply = response.data.answer;
+
+        // Handle actions
+        const actions = reply.match(/\[ACTION:[^\]]+\]/g) || [];
+        actions.forEach((actionStr: string) => {
+          const action = actionStr.slice(8, -1); // Remove [ACTION: and ]
+          console.log("Executing instruction:", action);
+
+          if (action === "MARK_WATER") {
+            updateWater(250);
+          } else if (action === "MARK_MEAL") {
+            markMealTaken();
+          } else if (action.startsWith("NAVIGATE:")) {
+            const path = action.split(":")[1];
+            if (path) navigate(path);
+          } else if (action.startsWith("OPEN_PATIENT_VIEW:")) {
+            const pid = action.split(":")[1];
+            if (pid) navigate(`/doctor/patients/${pid}`);
+          }
+        });
+
+        // Remove tags from the displayed text
+        const cleanReply = reply.replace(/\[ACTION:[^\]]+\]/g, "").trim();
+
+        setMessages((m) => [...m, { role: "bot", text: cleanReply, ts: Date.now() }]);
+
+        // Only speak if was voice input
+        if (wasVoiceInput) {
+          speakText(cleanReply);
+          setWasVoiceInput(false);
+        }
+      } else {
+        throw new Error("API responded with success: false");
       }
-    }, 2000);
+    } catch (error) {
+      console.error("AI Error:", error);
+      setMessages((m) => [...m, {
+        role: "bot",
+        text: "I'm sorry, I'm having trouble thinking clearly right now. Please try again in a moment.",
+        ts: Date.now()
+      }]);
+    } finally {
+      setIsWorking(false);
+    }
   };
 
   const toggleSpeech = () => {
@@ -536,18 +520,18 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
                   {m.role === "bot" ? <TypewriterText text={m.text || ""} /> : m.text}
                 </div>
               )}
-              
+
               {/* Role indicator */}
               <div className={cn(
                 "absolute -top-2 text-xs font-medium px-2 py-1 rounded-full",
-                m.role === "user" 
-                  ? "bg-blue-600 text-white left-2" 
+                m.role === "user"
+                  ? "bg-blue-600 text-white left-2"
                   : "bg-green-100 text-green-700 right-2"
               )}>
                 {m.role === "user" ? "You" : "Setu"}
               </div>
             </div>
-            
+
             {/* Timestamp */}
             <div className={cn(
               "mt-1 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-200",
@@ -558,7 +542,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
           </div>
         </div>
       ))}
-      
+
       {/* Typing indicator */}
       {isListening && (
         <div className="flex justify-start animate-in slide-in-from-bottom-2 duration-300">
@@ -576,7 +560,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
           </div>
         </div>
       )}
-      
+
       {/* Working indicator */}
       {isWorking && (
         <div className="flex justify-start animate-in slide-in-from-bottom-2 duration-300">
@@ -594,7 +578,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
           </div>
         </div>
       )}
-      
+
       <div ref={endRef} />
     </div>
   );
@@ -713,7 +697,7 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
               )}
             </div>
           </Button>
-          
+
           {/* Manual Send Button (only show when listening and has input) */}
           {isListening && input.trim() && (
             <Button
@@ -746,16 +730,16 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
             className="h-32 w-full rounded-md bg-black/10 object-cover"
           />
           <div className="mt-2 flex justify-end gap-2">
-            <Button 
-              size="sm" 
-              variant="outline" 
+            <Button
+              size="sm"
+              variant="outline"
               onClick={stopCamera}
               className="text-xs h-7 px-3"
             >
               Cancel
             </Button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               onClick={capturePhoto}
               className="text-xs h-7 px-3 bg-gray-600 hover:bg-gray-700"
             >

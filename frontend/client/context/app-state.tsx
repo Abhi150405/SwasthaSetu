@@ -209,7 +209,8 @@ export type AppState = {
   markAllRead: () => void;
   markNotificationRead: (id: string) => void;
   updateWater: (deltaMl: number) => void;
-  markMealTaken: () => void;
+  markMealTaken: (mealType?: string) => void;
+  fetchTodayProgress: () => Promise<void>;
   generateMockPlan: (overrides?: Partial<DietPlan>) => DietPlan;
   conversations: Record<string, ChatMessage[]>;
   addMessage: (
@@ -550,27 +551,78 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   const markNotificationRead = (id: string) =>
     setNotifications((prev) => prev.filter((x) => x.id !== id));
 
-  const updateWater = (deltaMl: number) => {
+  const fetchTodayProgress = async () => {
+    if (!currentUser || currentUser.role !== "patient") return;
+    try {
+      const response = await fetch("/api/progress/today");
+      const result = await response.json();
+      if (result.success && result.data) {
+        const data = result.data;
+        setProgress({
+          waterMl: data.water_intake_ml || 0,
+          waterGoalMl: 2500, // Or fetch from profile/settings
+          mealsPlanned: 3,
+          mealsTaken: data.meal_log?.filter((m: any) => m.status === "completed").length || 0,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch progress:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchTodayProgress();
+  }, [currentUser]);
+
+  const updateWater = async (deltaMl: number) => {
+    // Optimistic update
     setProgress((p) => ({
       ...p,
       waterMl: Math.max(0, Math.min(p.waterGoalMl, p.waterMl + deltaMl)),
     }));
-    addNotification({
-      type: "water",
-      title: "Hydration logged",
-      message: `+${deltaMl}ml water added.`,
-    });
+
+    try {
+      await fetch("/api/progress/water", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: deltaMl }),
+      });
+
+      addNotification({
+        type: "water",
+        title: "Hydration logged",
+        message: `+${deltaMl}ml water added.`,
+      });
+    } catch (error) {
+      console.error("Failed to sync water intake:", error);
+    }
   };
-  const markMealTaken = () => {
+
+  const markMealTaken = async (mealType?: string) => {
+    // If no type provided, try to guess based on current meals taken
+    const type = mealType || (progress.mealsTaken === 0 ? "breakfast" : progress.mealsTaken === 1 ? "lunch" : "dinner");
+
+    // Optimistic update
     setProgress((p) => ({
       ...p,
       mealsTaken: Math.min(p.mealsPlanned, p.mealsTaken + 1),
     }));
-    addNotification({
-      type: "diet",
-      title: "Meal recorded",
-      message: "Marked one meal as taken.",
-    });
+
+    try {
+      await fetch("/api/progress/meal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meal_type: type }),
+      });
+
+      addNotification({
+        type: "diet",
+        title: "Meal recorded",
+        message: `${type.charAt(0).toUpperCase() + type.slice(1)} marked as taken.`,
+      });
+    } catch (error) {
+      console.error("Failed to sync meal taken:", error);
+    }
   };
 
   const generateMockPlan = (overrides?: Partial<DietPlan>): DietPlan => {
@@ -647,6 +699,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
       markNotificationRead,
       updateWater,
       markMealTaken,
+      fetchTodayProgress,
       generateMockPlan,
       conversations,
       addMessage,

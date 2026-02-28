@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ChefHat, Salad, Stethoscope, ScanLine, Bot, Droplet } from "lucide-react";
+import { ChefHat, Salad, Stethoscope, ScanLine, Bot, Droplet, MessageCircle, Send, Sparkles, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import axios from "axios";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -26,6 +27,31 @@ export default function Dashboard() {
     markNotificationRead,
   } = useAppState();
 
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [aiInput, setAiInput] = useState("");
+  const [aiMessages, setAiMessages] = useState<{ role: 'user' | 'bot', content: string }[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const handleAskAi = async () => {
+    if (!aiInput.trim()) return;
+
+    const userMsg = aiInput;
+    setAiMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setAiInput("");
+    setAiLoading(true);
+
+    try {
+      const response = await axios.post("/api/ai/ask", { question: userMsg });
+      if (response.data.success) {
+        setAiMessages(prev => [...prev, { role: 'bot', content: response.data.answer }]);
+      }
+    } catch (error) {
+      toast({ variant: "destructive", title: "AI Error", description: "Could not reach the AI assistant." });
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const [connectOpen, setConnectOpen] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor & {
     experience?: string;
@@ -35,50 +61,45 @@ export default function Dashboard() {
     availability?: string;
   } | null>(null);
 
-  const chartData = useMemo(() => ([
-    {
-      day: "Mon",
-      water: 1200,
-      meals: 2,
-      calories: 1600
-    },
-    {
-      day: "Tue",
-      water: 1800,
-      meals: 3,
-      calories: 1950
-    },
-    {
-      day: "Wed",
-      water: 2200,
-      meals: 4,
-      calories: 2100
-    },
-    {
-      day: "Thu",
-      water: 2500,
-      meals: 3,
-      calories: 2300
-    },
-    {
-      day: "Fri",
-      water: 2000,
-      meals: 3,
-      calories: 1900
-    },
-    {
-      day: "Sat",
-      water: 1500,
-      meals: 2,
-      calories: 1750
-    },
-    {
-      day: "Sun",
-      water: 1900,
-      meals: 4,
-      calories: 2050
+  const [history, setHistory] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const response = await axios.get("/api/progress/history?limit=7");
+        if (response.data.success) {
+          setHistory(response.data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch history:", error);
+      }
+    };
+    if (currentUser) fetchHistory();
+  }, [currentUser, progress.waterMl, progress.mealsTaken]);
+
+  const chartData = useMemo(() => {
+    if (history.length === 0) {
+      return [
+        { day: "Mon", water: 0, meals: 0, calories: 0 },
+        { day: "Tue", water: 0, meals: 0, calories: 0 },
+        { day: "Wed", water: 0, meals: 0, calories: 0 },
+        { day: "Thu", water: 0, meals: 0, calories: 0 },
+        { day: "Fri", water: 0, meals: 0, calories: 0 },
+        { day: "Sat", water: 0, meals: 0, calories: 0 },
+        { day: "Sun", water: 0, meals: 0, calories: 0 },
+      ];
     }
-  ]), []);
+
+    return [...history].reverse().map(item => {
+      const date = new Date(item.date);
+      return {
+        day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        water: item.water_intake_ml,
+        meals: item.meal_log.filter((m: any) => m.status === 'completed').length,
+        calories: 2000
+      };
+    });
+  }, [history]);
 
   const cardVariants = {
     hidden: { opacity: 0, scale: 0.95 },
@@ -88,40 +109,40 @@ export default function Dashboard() {
 
   // For demo purposes, show all doctors as consulted
   const consultedDoctors = [...doctors];
-  
+
   // In a real app, you would use this logic:
   // const consultedDoctorIds = requests.map(r => r.doctorId);
   // const consultedDoctors = doctors.filter(d => consultedDoctorIds.includes(d.id));
 
   const statCards = [
-    { 
-      title: "Dosha", 
-      icon: Bot, 
-      value: currentUser?.dosha || "Kapha", 
+    {
+      title: "Dosha",
+      icon: Bot,
+      value: currentUser?.dosha || "Kapha",
       subtitle: "Complete quiz to personalize",
       bgGradient: "from-emerald-500 to-teal-400",
       iconColor: "text-white"
     },
-    { 
-      title: "Water Intake", 
-      icon: Droplet, 
-      value: `${progress.waterMl} / ${progress.waterGoalMl} ml`, 
+    {
+      title: "Water Intake",
+      icon: Droplet,
+      value: `${progress.waterMl} / ${progress.waterGoalMl} ml`,
       subtitle: "Track hydration",
       bgGradient: "from-blue-500 to-cyan-400",
       iconColor: "text-white"
     },
-    { 
-      title: "Meals", 
-      icon: Salad, 
-      value: `${progress.mealsTaken}/${progress.mealsPlanned}`, 
+    {
+      title: "Meals",
+      icon: Salad,
+      value: `${progress.mealsTaken}/${progress.mealsPlanned}`,
       subtitle: "Monitor meals",
       bgGradient: "from-amber-500 to-yellow-400",
       iconColor: "text-white"
     },
-    { 
-      title: "Last Plan", 
-      icon: ChefHat, 
-      value: dietPlan ? dietPlan.date : "None", 
+    {
+      title: "Last Plan",
+      icon: ChefHat,
+      value: dietPlan ? dietPlan.date : "None",
       subtitle: "Generate a plan to get started",
       bgGradient: "from-rose-500 to-pink-400",
       iconColor: "text-white"
@@ -134,11 +155,11 @@ export default function Dashboard() {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {statCards.map((item, index) => (
-            <motion.div 
-              key={index} 
-              variants={cardVariants} 
-              initial="hidden" 
-              animate="visible" 
+            <motion.div
+              key={index}
+              variants={cardVariants}
+              initial="hidden"
+              animate="visible"
               whileHover="hover"
             >
               <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
@@ -183,33 +204,33 @@ export default function Dashboard() {
                     >
                       <defs>
                         <linearGradient id="colorWater" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.1}/>
+                          <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.1} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                      <XAxis 
+                      <XAxis
                         dataKey="day"
                         tickLine={false}
                         axisLine={false}
                         tick={{ fill: '#6b7280', fontSize: 12 }}
                       />
-                      <YAxis 
+                      <YAxis
                         tickLine={false}
                         axisLine={false}
                         tick={{ fill: '#6b7280', fontSize: 12 }}
                         tickFormatter={(value) => `${value}ml`}
                       />
-                      <Tooltip 
+                      <Tooltip
                         formatter={(value) => [`${value}ml`, 'Water Intake']}
                         labelFormatter={(label) => `Day: ${label}`}
                       />
-                      <Area 
-                        type="monotone" 
-                        dataKey="water" 
-                        stroke="#0ea5e9" 
-                        fillOpacity={1} 
-                        fill="url(#colorWater)" 
+                      <Area
+                        type="monotone"
+                        dataKey="water"
+                        stroke="#0ea5e9"
+                        fillOpacity={1}
+                        fill="url(#colorWater)"
                         strokeWidth={2.5}
                         dot={{
                           fill: 'white',
@@ -255,8 +276,8 @@ export default function Dashboard() {
                   ) : (
                     <div className="space-y-3">
                       {consultedDoctors.map((d) => (
-                        <Card 
-                          key={d.id} 
+                        <Card
+                          key={d.id}
                           className="p-3 bg-white/70 backdrop-blur-sm border shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
                           onClick={() => setSelectedDoctor(d)}
                         >
@@ -311,17 +332,17 @@ export default function Dashboard() {
                     </DialogContent>
                   </Dialog>
 
-                  <Button 
-                    variant="outline" 
-                    className="w-full flex gap-2" 
+                  <Button
+                    variant="outline"
+                    className="w-full flex gap-2"
                     onClick={() => navigate('/recipes')}
                   >
                     <ChefHat className="h-4 w-4" /> Generate Recipe
                   </Button>
-                  
-                  <Button 
-                    variant="outline" 
-                    className="w-full flex gap-2" 
+
+                  <Button
+                    variant="outline"
+                    className="w-full flex gap-2"
                     onClick={() => navigate('/scan')}
                   >
                     <ScanLine className="h-4 w-4" /> Scan Barcode
@@ -352,7 +373,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </DialogHeader>
-                
+
                 <div className="grid gap-6 md:grid-cols-2">
                   {/* Left Column */}
                   <div className="space-y-4">
@@ -362,7 +383,7 @@ export default function Dashboard() {
                         {selectedDoctor.bio || 'Experienced healthcare professional with a focus on patient wellness and preventive care.'}
                       </p>
                     </div>
-                    
+
                     <div className="bg-muted/50 p-4 rounded-lg">
                       <h4 className="font-medium text-sm mb-2">SPECIALIZATIONS</h4>
                       <div className="flex flex-wrap gap-2">
@@ -373,7 +394,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Right Column */}
                   <div className="space-y-4">
                     <div className="bg-muted/50 p-4 rounded-lg">
@@ -385,7 +406,7 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="bg-muted/50 p-4 rounded-lg">
                       <h4 className="font-medium text-sm mb-2">AVAILABILITY</h4>
                       <p className="text-sm text-muted-foreground">
@@ -399,16 +420,16 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="flex justify-end gap-3 pt-2">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => setSelectedDoctor(null)}
                     className="px-6"
                   >
                     Close
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => {
                       if (!currentUser) {
                         toast({
@@ -418,7 +439,7 @@ export default function Dashboard() {
                         });
                         return;
                       }
-                      
+
                       const newRequest = {
                         id: `req_${Date.now()}`,
                         userId: currentUser.id,
@@ -428,7 +449,7 @@ export default function Dashboard() {
                         patientName: currentUser.name,
                         patientDosha: currentUser.dosha
                       };
-                      
+
                       setRequests([...requests, newRequest]);
                       setSelectedDoctor(null);
                       addNotification({
@@ -522,6 +543,92 @@ export default function Dashboard() {
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+
+      {/* Floating AI Assistant */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <AnimatePresence>
+          {aiChatOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.9 }}
+              className="absolute bottom-16 right-0 w-[350px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden"
+            >
+              <div className="bg-gradient-to-r from-emerald-500 to-teal-400 p-4 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="bg-white/20 p-2 rounded-lg">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm">Swastha AI</h4>
+                    <p className="text-[10px] opacity-80">Online & Ready to help</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setAiChatOpen(false)} className="text-white hover:bg-white/10">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="h-[350px] overflow-y-auto p-4 space-y-4 bg-slate-50/50">
+                {aiMessages.length === 0 && (
+                  <div className="text-center py-8">
+                    <Bot className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                    <p className="text-sm text-slate-500 font-medium">Hello! I'm Swastha AI.</p>
+                    <p className="text-xs text-slate-400">Ask me anything about your health or diet.</p>
+                  </div>
+                )}
+                {aiMessages.map((m, i) => (
+                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${m.role === 'user'
+                      ? 'bg-emerald-500 text-white rounded-tr-none shadow-md'
+                      : 'bg-white text-slate-700 rounded-tl-none border border-slate-100 shadow-sm'
+                      }`}>
+                      {m.content}
+                    </div>
+                  </div>
+                ))}
+                {aiLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-white p-3 rounded-2xl rounded-tl-none border border-slate-100 shadow-sm">
+                      <div className="flex gap-1">
+                        <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce"></span>
+                        <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                        <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-white border-t flex gap-2">
+                <input
+                  type="text"
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAskAi()}
+                  placeholder="Ask a health question..."
+                  className="flex-1 bg-slate-100 border-0 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+                <Button onClick={handleAskAi} size="icon" disabled={aiLoading || !aiInput.trim()} className="bg-emerald-500 hover:bg-emerald-600 rounded-xl">
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <Button
+          onClick={() => setAiChatOpen(!aiChatOpen)}
+          size="lg"
+          className="h-14 w-14 rounded-full shadow-2xl bg-gradient-to-br from-emerald-500 to-teal-400 hover:scale-110 transition-transform duration-300 p-0"
+        >
+          {aiChatOpen ? (
+            <X className="h-6 w-6 text-white" />
+          ) : (
+            <Bot className="h-7 w-7 text-white" />
+          )}
+        </Button>
       </div>
     </div>
   );

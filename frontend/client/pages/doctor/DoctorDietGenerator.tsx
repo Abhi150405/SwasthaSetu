@@ -4,6 +4,8 @@ import { useAppState } from "@/context/app-state";
 import PatientVerification from "@/components/doctor/dietPlan/PatientVerification";
 import DietQuiz from "@/components/doctor/dietPlan/DietQuiz";
 import { Progress } from "@/components/ui/progress";
+import axios from "axios";
+import { toast } from "sonner";
 
 import {
   Card,
@@ -14,7 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { User, X, ArrowLeft, Leaf, Download } from "lucide-react";
+import { User, X, ArrowLeft, Leaf, Download, Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -185,6 +187,7 @@ export default function DoctorDietGenerator() {
   const [confirmed, setConfirmed] = useState(!!patientId);
   const [patientQuery, setPatientQuery] = useState<string>(patientName || "");
   const [foundDosha, setFoundDosha] = useState<string>(dosha || "");
+  const [isLoading, setIsLoading] = useState(false);
 
   // Auto-advance to step 2 if patient is confirmed
   useEffect(() => {
@@ -236,7 +239,7 @@ export default function DoctorDietGenerator() {
     if (match) {
       setFetchedName(
         match.patientName ||
-          (patientName ? decodeURIComponent(patientName) : "Patient"),
+        (patientName ? decodeURIComponent(patientName) : "Patient"),
       );
       setFoundDosha((match.patientDosha as string) || foundDosha);
       setFetchError(null);
@@ -340,22 +343,22 @@ export default function DoctorDietGenerator() {
     doc.setFontSize(24);
     doc.setFont('helvetica', 'bold');
     doc.text('Personalized Diet Plan', pageWidth / 2, yPosition, { align: 'center' });
-    
+
     yPosition += 15;
     doc.setFontSize(14);
     doc.setFont('helvetica', 'normal');
     doc.text(`Generated on ${new Date().toLocaleDateString()}`, pageWidth / 2, yPosition, { align: 'center' });
-    
+
     // Patient Information Section
     yPosition += 25;
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text('Patient Information', 20, yPosition);
-    
+
     yPosition += 10;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    
+
     const patientInfo = [
       ['Patient Name:', fetchedName || 'N/A'],
       ['Dosha Type:', foundDosha || dosha || 'Not specified'],
@@ -521,7 +524,7 @@ export default function DoctorDietGenerator() {
 
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const guidelines = [
       '• Eat in a peaceful environment, free from distractions',
       '• Chew food thoroughly and eat at a moderate pace',
@@ -546,7 +549,7 @@ export default function DoctorDietGenerator() {
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'italic');
-    doc.text('This diet plan is generated based on Ayurvedic principles. Please consult with your healthcare provider before making significant dietary changes.', 
+    doc.text('This diet plan is generated based on Ayurvedic principles. Please consult with your healthcare provider before making significant dietary changes.',
       pageWidth / 2, yPosition, { align: 'center', maxWidth: pageWidth - 40 });
 
     // Page numbers
@@ -672,14 +675,79 @@ export default function DoctorDietGenerator() {
           />
           <div className="flex justify-end">
             <button
-              className="px-4 py-2 rounded bg-primary text-white disabled:opacity-50"
-              disabled={!confirmed}
-              onClick={() => {
-                setPlan(generatePlan());
-                setStep(3);
+              className="px-6 py-2 rounded-full bg-primary text-white disabled:opacity-50 font-medium transition-all hover:shadow-lg flex items-center gap-2"
+              disabled={!confirmed || isLoading}
+              onClick={async () => {
+                setIsLoading(true);
+                try {
+                  const match = requests.find(r => r.patientName === fetchedName);
+                  const pId = match?.userId || patientId || "";
+
+                  console.log("Generating AI diet for patient:", pId);
+
+                  const response = await axios.post("/api/diet/generate", {
+                    patientId: pId,
+                    age: match?.age || 30,
+                    weight: match?.weight || 70,
+                    height: match?.height || 170,
+                    conditions: restrictions,
+                    dietary_preferences: [cuisine, veg ? "Vegetarian" : "Non-Vegetarian"],
+                    goals: "Holistic wellness and Ayurvedic balance",
+                    gender: match?.gender || "Male"
+                  }, { withCredentials: true });
+
+                  console.log("AI Backend Response:", response.data);
+
+                  if (response.data.success && response.data.data && response.data.data.plan) {
+                    const aiPlan = response.data.data.plan;
+                    // Map AI response to frontend UI format
+                    const mappedPlan: DayPlan[] = aiPlan.map((d: any) => ({
+                      day: d.day ? `Day ${d.day}` : "New Day",
+                      meals: (d.meals || []).map((m: any) => ({
+                        type: m.type || "Meal",
+                        name: (m.items || []).map((i: any) => i.name).join(", ") || "Balanced Meal",
+                        calories: m.total_nutrition?.calories || 0,
+                        protein: m.total_nutrition?.protein || 0,
+                        carbs: m.total_nutrition?.carbs || 0,
+                        fat: m.total_nutrition?.fat || 0,
+                        vitamins: [],
+                        ayur: {
+                          dosha: d.daily_dosha_balance ? Object.entries(d.daily_dosha_balance).map(([k, v]) => `${k}:${v}`).join(", ") : "Balanced",
+                          rasa: response.data.data.ayurvedic_analysis?.recommended_tastes?.join(", ") || "Balanced",
+                          properties: d.special_recommendations || []
+                        }
+                      }))
+                    }));
+
+                    if (mappedPlan.length === 0) {
+                      throw new Error("AI returned an empty plan.");
+                    }
+
+                    setPlan(mappedPlan);
+                    setStep(3);
+                    toast.success("AI Diet Plan Generated Successfully!");
+                  } else {
+                    toast.error("Failed to generate plan: Empty response from AI");
+                  }
+                } catch (error: any) {
+                  console.error("AI Generation Error:", error);
+                  toast.error(error.response?.data?.message || error.message || "Error generating AI diet plan");
+                } finally {
+                  setIsLoading(false);
+                }
               }}
             >
-              Generate Diet Plan
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  AI Generating...
+                </>
+              ) : (
+                <>
+                  <Leaf className="h-4 w-4" />
+                  Generate AI Diet Plan
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -756,24 +824,24 @@ export default function DoctorDietGenerator() {
                           requests.map((r) =>
                             r.id === match.id
                               ? {
-                                  ...r,
-                                  plan: plan.flatMap((d) =>
-                                    d.meals.map((m) => ({
-                                      time:
-                                        m.type === "Breakfast"
-                                          ? "08:00"
-                                          : m.type === "Lunch"
-                                            ? "12:30"
-                                            : m.type === "Snack"
-                                              ? "16:00"
-                                              : "19:30",
-                                      name: m.name,
-                                      calories: m.calories,
-                                      waterMl:
-                                        m.type === "Snack" ? 200 : undefined,
-                                    })),
-                                  ),
-                                }
+                                ...r,
+                                plan: plan.flatMap((d) =>
+                                  d.meals.map((m) => ({
+                                    time:
+                                      m.type === "Breakfast"
+                                        ? "08:00"
+                                        : m.type === "Lunch"
+                                          ? "12:30"
+                                          : m.type === "Snack"
+                                            ? "16:00"
+                                            : "19:30",
+                                    name: m.name,
+                                    calories: m.calories,
+                                    waterMl:
+                                      m.type === "Snack" ? 200 : undefined,
+                                  })),
+                                ),
+                              }
                               : r,
                           ),
                         );
@@ -818,29 +886,29 @@ export default function DoctorDietGenerator() {
                                     setPlan((p) =>
                                       p
                                         ? p.map((d, idx) =>
-                                            idx === di
-                                              ? {
-                                                  ...d,
-                                                  meals: [
-                                                    ...d.meals,
-                                                    {
-                                                      type: "Snack",
-                                                      name: "Herbal Tea + Nuts",
-                                                      calories: 180,
-                                                      protein: 6,
-                                                      carbs: 12,
-                                                      fat: 10,
-                                                      vitamins: [],
-                                                      ayur: {
-                                                        dosha: "Vata",
-                                                        rasa: "Kashaya",
-                                                        properties: ["Warm"],
-                                                      },
-                                                    },
-                                                  ],
-                                                }
-                                              : d,
-                                          )
+                                          idx === di
+                                            ? {
+                                              ...d,
+                                              meals: [
+                                                ...d.meals,
+                                                {
+                                                  type: "Snack",
+                                                  name: "Herbal Tea + Nuts",
+                                                  calories: 180,
+                                                  protein: 6,
+                                                  carbs: 12,
+                                                  fat: 10,
+                                                  vitamins: [],
+                                                  ayur: {
+                                                    dosha: "Vata",
+                                                    rasa: "Kashaya",
+                                                    properties: ["Warm"],
+                                                  },
+                                                },
+                                              ],
+                                            }
+                                            : d,
+                                        )
                                         : p,
                                     );
                                   }}
@@ -852,8 +920,8 @@ export default function DoctorDietGenerator() {
                           )}
                           <TableCell>
                             {editing &&
-                            editing.di === di &&
-                            editing.mi === mi ? (
+                              editing.di === di &&
+                              editing.mi === mi ? (
                               <Input
                                 value={m.name}
                                 onChange={(e) => {
@@ -861,17 +929,17 @@ export default function DoctorDietGenerator() {
                                   setPlan((p) =>
                                     p
                                       ? p.map((d, i1) =>
-                                          i1 === di
-                                            ? {
-                                                ...d,
-                                                meals: d.meals.map((mm, i2) =>
-                                                  i2 === mi
-                                                    ? { ...mm, name: v }
-                                                    : mm,
-                                                ),
-                                              }
-                                            : d,
-                                        )
+                                        i1 === di
+                                          ? {
+                                            ...d,
+                                            meals: d.meals.map((mm, i2) =>
+                                              i2 === mi
+                                                ? { ...mm, name: v }
+                                                : mm,
+                                            ),
+                                          }
+                                          : d,
+                                      )
                                       : p,
                                   );
                                 }}
@@ -899,28 +967,28 @@ export default function DoctorDietGenerator() {
                           </TableCell>
                           <TableCell>
                             {editing &&
-                            editing.di === di &&
-                            editing.mi === mi ? (
+                              editing.di === di &&
+                              editing.mi === mi ? (
                               <Select
                                 value={m.type}
                                 onValueChange={(v) => {
                                   setPlan((p) =>
                                     p
                                       ? p.map((d, i1) =>
-                                          i1 === di
-                                            ? {
-                                                ...d,
-                                                meals: d.meals.map((mm, i2) =>
-                                                  i2 === mi
-                                                    ? {
-                                                        ...mm,
-                                                        type: v as Meal["type"],
-                                                      }
-                                                    : mm,
-                                                ),
-                                              }
-                                            : d,
-                                        )
+                                        i1 === di
+                                          ? {
+                                            ...d,
+                                            meals: d.meals.map((mm, i2) =>
+                                              i2 === mi
+                                                ? {
+                                                  ...mm,
+                                                  type: v as Meal["type"],
+                                                }
+                                                : mm,
+                                            ),
+                                          }
+                                          : d,
+                                      )
                                       : p,
                                   );
                                 }}
@@ -943,8 +1011,8 @@ export default function DoctorDietGenerator() {
                           </TableCell>
                           <TableCell className="text-right">
                             {editing &&
-                            editing.di === di &&
-                            editing.mi === mi ? (
+                              editing.di === di &&
+                              editing.mi === mi ? (
                               <Input
                                 className="text-right"
                                 type="number"
@@ -957,17 +1025,17 @@ export default function DoctorDietGenerator() {
                                   setPlan((p) =>
                                     p
                                       ? p.map((d, i1) =>
-                                          i1 === di
-                                            ? {
-                                                ...d,
-                                                meals: d.meals.map((mm, i2) =>
-                                                  i2 === mi
-                                                    ? { ...mm, calories: v }
-                                                    : mm,
-                                                ),
-                                              }
-                                            : d,
-                                        )
+                                        i1 === di
+                                          ? {
+                                            ...d,
+                                            meals: d.meals.map((mm, i2) =>
+                                              i2 === mi
+                                                ? { ...mm, calories: v }
+                                                : mm,
+                                            ),
+                                          }
+                                          : d,
+                                      )
                                       : p,
                                   );
                                 }}
@@ -978,8 +1046,8 @@ export default function DoctorDietGenerator() {
                           </TableCell>
                           <TableCell className="text-right">
                             {editing &&
-                            editing.di === di &&
-                            editing.mi === mi ? (
+                              editing.di === di &&
+                              editing.mi === mi ? (
                               <div className="flex justify-end gap-2">
                                 <Button
                                   size="sm"
@@ -1008,17 +1076,9 @@ export default function DoctorDietGenerator() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => {
-                                    setSearch("");
-                                    setEditing({ di, mi });
-                                    const el =
-                                      document.getElementById(
-                                        "food-search-input",
-                                      );
-                                    if (el)
-                                      setTimeout(
-                                        () => (el as HTMLInputElement).focus(),
-                                        0,
-                                      );
+                                    const match = requests.find(r => r.patientName === fetchedName);
+                                    const pId = match?.userId || patientId || "";
+                                    navigate(`/doctor/generator/recipes?patientId=${pId}&patientName=${encodeURIComponent(fetchedName || "")}&dosha=${foundDosha || dosha || ""}&mealName=${encodeURIComponent(m.name)}`);
                                   }}
                                 >
                                   Search Food
@@ -1030,15 +1090,15 @@ export default function DoctorDietGenerator() {
                                     setPlan((p) =>
                                       p
                                         ? p.map((d, i1) =>
-                                            i1 === di
-                                              ? {
-                                                  ...d,
-                                                  meals: d.meals.filter(
-                                                    (_, i2) => i2 !== mi,
-                                                  ),
-                                                }
-                                              : d,
-                                          )
+                                          i1 === di
+                                            ? {
+                                              ...d,
+                                              meals: d.meals.filter(
+                                                (_, i2) => i2 !== mi,
+                                              ),
+                                            }
+                                            : d,
+                                        )
                                         : p,
                                     )
                                   }
@@ -1094,26 +1154,26 @@ export default function DoctorDietGenerator() {
                             setPlan((p) =>
                               p
                                 ? p.map((d, i1) =>
-                                    i1 === di
-                                      ? {
-                                          ...d,
-                                          meals: d.meals.map((mm, i2) =>
-                                            i2 === mi
-                                              ? {
-                                                  ...mm,
-                                                  name: f.name,
-                                                  type: f.type,
-                                                  calories: f.calories,
-                                                  protein: f.protein,
-                                                  carbs: f.carbs,
-                                                  fat: f.fat,
-                                                  ayur: f.ayur,
-                                                }
-                                              : mm,
-                                          ),
-                                        }
-                                      : d,
-                                  )
+                                  i1 === di
+                                    ? {
+                                      ...d,
+                                      meals: d.meals.map((mm, i2) =>
+                                        i2 === mi
+                                          ? {
+                                            ...mm,
+                                            name: f.name,
+                                            type: f.type,
+                                            calories: f.calories,
+                                            protein: f.protein,
+                                            carbs: f.carbs,
+                                            fat: f.fat,
+                                            ayur: f.ayur,
+                                          }
+                                          : mm,
+                                      ),
+                                    }
+                                    : d,
+                                )
                                 : p,
                             );
                           }}

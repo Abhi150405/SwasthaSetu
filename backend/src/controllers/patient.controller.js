@@ -4,7 +4,7 @@ import { Doctor } from "../models/doctor.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { uploadOnGCS } from "../utils/gcs.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 const generateRefreshAndAccessTokens = async (userId) => {
   try {
@@ -56,8 +56,8 @@ const registerPatient = asyncHandler(async (req, res) => {
 
   const medical_history = await Promise.all(
     uploadedDocs.map(async (localFilePath) => {
-      const gcsRes = await uploadOnGCS(localFilePath, "PatientDocuments");
-      return gcsRes?.secure_url || null;
+      const cloudinaryRes = await uploadOnCloudinary(localFilePath);
+      return cloudinaryRes?.secure_url || null;
     })
   );
 

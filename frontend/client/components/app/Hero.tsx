@@ -4,10 +4,11 @@ import { motion } from "framer-motion";
 // Updated Hero Component - v2.0
 
 export const Hero: React.FC<{
-  onLoginUser?: () => void;
+  onLoginPatient?: () => void;
+  onLoginDoctor?: () => void;
   onRegisterUser?: () => void;
   onRegisterDoctor?: () => void;
-}> = ({ onLoginUser, onRegisterUser, onRegisterDoctor }) => {
+}> = ({ onLoginPatient, onLoginDoctor, onRegisterUser, onRegisterDoctor }) => {
 
   return (
     <section
@@ -218,59 +219,31 @@ export const Hero: React.FC<{
             </motion.button>
           </motion.div>
 
-          {/* Enhanced Login Link */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 1.2, ease: "easeOut" }}
-            className="relative group"
+            className="flex flex-wrap gap-4 items-center"
           >
+            <span className="text-green-700/80 font-sans text-sm font-medium">Already have an account?</span>
+
             <motion.button
-              onClick={onLoginUser}
+              onClick={onLoginPatient}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="relative inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-gray-50/50 to-gray-100/50 hover:from-gray-100/70 hover:to-gray-200/70 rounded-full border border-gray-200/30 hover:border-gray-300/50 backdrop-blur-sm transition-all duration-300 shadow-sm hover:shadow-md"
+              className="inline-flex items-center space-x-2 px-6 py-2 bg-white/50 hover:bg-white/80 rounded-full border border-green-200/50 backdrop-blur-sm transition-all shadow-sm"
             >
-              {/* Decorative left icon */}
-              <motion.div
-                animate={{ rotate: [0, 10, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                className="w-4 h-4 rounded-full bg-gradient-to-r from-gray-400 to-gray-500 opacity-60"
-              />
-              
-              {/* Text content */}
-              <div className="flex items-center space-x-2">
-                <span className="text-green-700/80 font-sans text-sm font-medium">Already have an account?</span>
-                <motion.span
-                  className="text-green-900 font-sans text-sm font-semibold relative"
-                  whileHover={{ color: "#15803b" }}
-                >
-                  Sign in 
-                  {/* Animated underline */}
-                  <motion.div
-                    className="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full"
-                    initial={{ scaleX: 0 }}
-                    whileHover={{ scaleX: 1 }}
-                    transition={{ duration: 0.3, ease: "easeOut" }}
-                  />
-                </motion.span>
-              </div>
-              
-              {/* Decorative right arrow */}
-              <motion.svg
-                className="w-4 h-4 text-green-600/60 group-hover:text-green-700 transition-colors duration-300"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                animate={{ x: [0, 3, 0] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </motion.svg>
+              <span className="text-green-900 font-sans text-xs font-semibold">Sign in as Patient</span>
             </motion.button>
-            
-            {/* Subtle glow effect */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-full bg-gradient-to-r from-gray-400/10 to-gray-500/10 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10 bg-white" />
+
+            <motion.button
+              onClick={onLoginDoctor}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="inline-flex items-center space-x-2 px-6 py-2 bg-emerald-50/50 hover:bg-emerald-50/80 rounded-full border border-emerald-200/50 backdrop-blur-sm transition-all shadow-sm"
+            >
+              <span className="text-emerald-900 font-sans text-xs font-semibold">Sign in as Doctor</span>
+            </motion.button>
           </motion.div>
         </div>
       </div>
