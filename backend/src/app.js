@@ -5,18 +5,24 @@ import cookieParser from 'cookie-parser';
 
 const app = express();
 
-// app.use(cors({
-//     origin:process.env.CORS_ORIGIN || 'http://localhost:5173',
-//     credentials:true
-// }))
-const allowedOrigin =
-  process.env.NODE_ENV === "production"
-    ? process.env.PROD_ORIGIN
-    : process.env.DEV_ORIGIN.split(",");
+// CORS configuration
+// In production, set CORS_ORIGIN env var on Render to your Vercel URL(s)
+// e.g. "https://swasthasetu.vercel.app"
+const corsOriginEnv = process.env.CORS_ORIGIN || process.env.PROD_ORIGIN || "";
+const isProduction = process.env.NODE_ENV === "production";
+
+let allowedOrigins;
+if (corsOriginEnv) {
+  allowedOrigins = corsOriginEnv.split(",").map(o => o.trim());
+} else if (isProduction) {
+  allowedOrigins = "*";  // fallback: allow all if no origin is explicitly set
+} else {
+  allowedOrigins = (process.env.DEV_ORIGIN || "http://localhost:8080").split(",");
+}
 
 app.use(cors({
-  origin: allowedOrigin,
-  credentials: true
+  origin: allowedOrigins,
+  credentials: allowedOrigins !== "*",  // credentials not allowed with wildcard
 }));
 app.use(express.json())
 app.use(express.urlencoded({ extended: true, limit: "16kb" }))

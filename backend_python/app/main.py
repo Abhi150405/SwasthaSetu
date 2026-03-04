@@ -8,12 +8,24 @@ app = FastAPI(title=settings.PROJECT_NAME)
 
 # Set up CORS
 import os
-cors_origins = os.getenv("CORS_ORIGIN", settings.DEV_ORIGIN).split(",")
+
+# In production, CORS_ORIGIN env var should be set to your Vercel URL(s)
+# e.g. "https://swasthasetu.vercel.app,https://swasthasetu-git-main.vercel.app"
+# Falls back to allowing all origins if not set in production
+cors_origins_env = os.getenv("CORS_ORIGIN", "")
+is_production = os.getenv("NODE_ENV", "development") == "production"
+
+if cors_origins_env:
+    cors_origins = [o.strip() for o in cors_origins_env.split(",")]
+elif is_production:
+    cors_origins = ["*"]
+else:
+    cors_origins = [settings.DEV_ORIGIN]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_credentials=cors_origins != ["*"],  # credentials not allowed with wildcard
     allow_methods=["*"],
     allow_headers=["*"],
 )
