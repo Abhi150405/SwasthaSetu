@@ -181,7 +181,7 @@ export const Features: React.FC = () => {
             {/* Clean Center Image without effects */}
             <div className="flex justify-center relative py-4 lg:py-8 order-2 lg:order-none">
               <img
-                src="/images/Gemini_Generated_Image_4yzcsi4yzcsi4yzc.png"
+                src="/images/gemini_generated_image_4yzcsi4yzcsi4yzc.png"
                 alt="Wellness Journey"
                 className="max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg mx-auto rounded-3xl"
               />

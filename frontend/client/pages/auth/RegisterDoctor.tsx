@@ -196,7 +196,7 @@ export default function RegisterDoctor() {
         >
           <div className="absolute inset-0 w-full h-full">
             <img
-              src="/images/Gemini_Generated_Image_uwnah8uwnah8uwna.png"
+              src="/images/gemini_generated_image_uwnah8uwnah8uwna.png"
               alt="Healthcare professional illustration"
               className="w-full h-full object-cover object-center"
               style={{
