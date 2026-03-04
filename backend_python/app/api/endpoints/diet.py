@@ -101,7 +101,7 @@ async def generate_diet_plan(request: DietRequest):
         text = result.text
         diet_data = json.loads(text)
         
-        return {{"success": True, "data": diet_data}}
+        return {"success": True, "data": diet_data}
 
     except Exception as e:
         print(f"Diet Plan Error: {e}")
