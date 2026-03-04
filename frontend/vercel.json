@@ -2,15 +2,15 @@
   "rewrites": [
     {
       "source": "/api/ai/:path*",
-      "destination": "https://swasthasetu-1.onrender.com/api/ai/:path*"
+      "destination": "https://swasthasetu-2.onrender.com/api/ai/:path*"
     },
     {
       "source": "/api/recipe/:path*",
-      "destination": "https://swasthasetu-1.onrender.com/api/recipe/:path*"
+      "destination": "https://swasthasetu-2.onrender.com/api/recipe/:path*"
     },
     {
       "source": "/api/diet/:path*",
-      "destination": "https://swasthasetu-1.onrender.com/api/diet/:path*"
+      "destination": "https://swasthasetu-2.onrender.com/api/diet/:path*"
     },
     {
       "source": "/api/:path*",
