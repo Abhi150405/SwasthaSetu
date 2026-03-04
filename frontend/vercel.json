@@ -14,7 +14,7 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "https://swasthasetu-yf4c.onrender.com/api/:path*"
+      "destination": "https://swasthasetu-3.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
