@@ -40,4 +40,5 @@ def read_root():
     return {"message": "SwasthaSetu Python Backend is running!"}
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=5001, reload=True)
+    port = int(os.getenv("PORT", 5001))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
