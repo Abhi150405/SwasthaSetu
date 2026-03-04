@@ -23,7 +23,7 @@ services:
     name: swasthasetu-node
     runtime: node
     rootDir: backend
-    buildCommand: npm install
+    buildCommand: npm install --legacy-peer-deps
     startCommand: node src/index.js
     envVars:
       - key: NODE_ENV
