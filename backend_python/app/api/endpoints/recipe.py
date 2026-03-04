@@ -74,7 +74,7 @@ async def generate_recipe(request: RecipeRequest):
             
         recipe_data = json.loads(json_match.group(0))
         
-        return {{"success": True, "data": recipe_data}}
+        return {"success": True, "data": recipe_data}
 
     except Exception as e:
         print(f"Recipe Error: {e}")
