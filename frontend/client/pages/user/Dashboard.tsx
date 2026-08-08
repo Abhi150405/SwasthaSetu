@@ -25,9 +25,15 @@ export default function Dashboard() {
     addNotification,
     markAllRead,
     markNotificationRead,
+    createConsultRequest,
+    updateWater,
+    markMealTaken,
   } = useAppState();
 
+
+  const [selectedDayIdx, setSelectedDayIdx] = useState(0);
   const [aiChatOpen, setAiChatOpen] = useState(false);
+
   const [aiInput, setAiInput] = useState("");
   const [aiMessages, setAiMessages] = useState<{ role: 'user' | 'bot', content: string }[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -43,7 +49,27 @@ export default function Dashboard() {
     try {
       const response = await axios.post("/api/ai/ask", { question: userMsg });
       if (response.data.success) {
-        setAiMessages(prev => [...prev, { role: 'bot', content: response.data.answer }]);
+        let reply = response.data.answer || "";
+
+        // Process AI action tags (e.g. [ACTION:MARK_WATER], [ACTION:MARK_WATER:500], [ACTION:MARK_MEAL])
+        const actions = reply.match(/\[ACTION:[^\]]+\]/g) || [];
+        actions.forEach((actionStr: string) => {
+          const action = actionStr.slice(8, -1);
+          if (action.startsWith("MARK_WATER")) {
+            const parts = action.split(":");
+            const amount = parts[1] ? parseInt(parts[1], 10) : 250;
+            updateWater(isNaN(amount) ? 250 : amount);
+          } else if (action === "MARK_MEAL") {
+            markMealTaken();
+          } else if (action.startsWith("NAVIGATE:")) {
+            const path = action.split(":")[1];
+            if (path) navigate(path);
+          }
+        });
+
+        // Clean action tags from the text output
+        const cleanReply = reply.replace(/\[ACTION:[^\]]+\]/g, "").trim();
+        setAiMessages(prev => [...prev, { role: 'bot', content: cleanReply }]);
       }
     } catch (error) {
       toast({ variant: "destructive", title: "AI Error", description: "Could not reach the AI assistant." });
@@ -51,6 +77,7 @@ export default function Dashboard() {
       setAiLoading(false);
     }
   };
+
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor & {
@@ -60,6 +87,21 @@ export default function Dashboard() {
     location?: string;
     availability?: string;
   } | null>(null);
+  const [consultationLoading, setConsultationLoading] = useState(false);
+  const [myConsultations, setMyConsultations] = useState<any[]>([]);
+
+  const fetchMyConsultations = async () => {
+    try {
+      const res = await axios.get("/api/consultation/patient");
+      if (res.data.success) setMyConsultations(res.data.data);
+    } catch (e) {
+      console.error("Failed to fetch consultations:", e);
+    }
+  };
+
+  React.useEffect(() => {
+    if (currentUser) fetchMyConsultations();
+  }, [currentUser]);
 
   const [history, setHistory] = useState<any[]>([]);
 
@@ -107,12 +149,15 @@ export default function Dashboard() {
     hover: { scale: 1.02, transition: { duration: 0.2 } },
   };
 
-  // For demo purposes, show all doctors as consulted
-  const consultedDoctors = [...doctors];
-
-  // In a real app, you would use this logic:
-  // const consultedDoctorIds = requests.map(r => r.doctorId);
-  // const consultedDoctors = doctors.filter(d => consultedDoctorIds.includes(d.id));
+  // Show doctors the patient has actually sent consultation requests to
+  const consultedDoctors = myConsultations.map((c: any) => ({
+    id: c.doctorId?._id || c.doctorId,
+    name: c.doctorId?.name || "Unknown Doctor",
+    specialty: c.doctorId?.specialty || "General Medicine",
+    hospital: c.doctorId?.hospital || "",
+    rating: 4.8,
+    status: c.status,
+  }));
 
   const statCards = [
     {
@@ -127,7 +172,7 @@ export default function Dashboard() {
       title: "Water Intake",
       icon: Droplet,
       value: `${progress.waterMl} / ${progress.waterGoalMl} ml`,
-      subtitle: "Track hydration",
+      subtitle: `👨‍⚕️ Target set by ${progress.doctorName || 'Dr. Sharma'}`,
       bgGradient: "from-blue-500 to-cyan-400",
       iconColor: "text-white"
     },
@@ -272,12 +317,12 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   {consultedDoctors.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">You have not consulted any doctors yet.</div>
+                    <div className="text-sm text-muted-foreground py-2">You have not requested any consultations yet.</div>
                   ) : (
                     <div className="space-y-3">
-                      {consultedDoctors.map((d) => (
+                      {consultedDoctors.map((d, idx) => (
                         <Card
-                          key={d.id}
+                          key={`${d.id}-${idx}`}
                           className="p-3 bg-white/70 backdrop-blur-sm border shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
                           onClick={() => setSelectedDoctor(d)}
                         >
@@ -286,7 +331,9 @@ export default function Dashboard() {
                               <div className="font-medium">{d.name}</div>
                               <div className="text-xs text-muted-foreground">{d.specialty}</div>
                             </div>
-                            <Badge variant="secondary">★ {d.rating}</Badge>
+                            <Badge variant={d.status === 'accepted' ? 'default' : d.status === 'rejected' ? 'destructive' : 'secondary'}>
+                              {d.status === 'accepted' ? '✓ Accepted' : d.status === 'rejected' ? '✗ Rejected' : '⏳ Pending'}
+                            </Badge>
                           </div>
                         </Card>
                       ))}
@@ -430,7 +477,8 @@ export default function Dashboard() {
                     Close
                   </Button>
                   <Button
-                    onClick={() => {
+                    disabled={consultationLoading}
+                    onClick={async () => {
                       if (!currentUser) {
                         toast({
                           variant: "destructive",
@@ -440,31 +488,38 @@ export default function Dashboard() {
                         return;
                       }
 
-                      const newRequest = {
-                        id: `req_${Date.now()}`,
-                        userId: currentUser.id,
-                        doctorId: selectedDoctor.id,
-                        status: "pending" as const,
-                        createdAt: new Date().toISOString(),
-                        patientName: currentUser.name,
-                        patientDosha: currentUser.dosha
-                      };
+                      setConsultationLoading(true);
+                      try {
+                        await createConsultRequest({
+                          doctorId: selectedDoctor.id,
+                          patientName: currentUser.name,
+                          patientDosha: currentUser.dosha,
+                        });
 
-                      setRequests([...requests, newRequest]);
-                      setSelectedDoctor(null);
-                      addNotification({
-                        type: "doctor",
-                        title: "Consultation requested",
-                        message: `We'll connect you with Dr. ${selectedDoctor.name} shortly.`
-                      });
-                      toast({
-                        title: "Consultation requested",
-                        description: `We'll connect you with Dr. ${selectedDoctor.name} shortly. You'll see updates in Notifications.`
-                      });
+                        setSelectedDoctor(null);
+                        await fetchMyConsultations();
+                        addNotification({
+                          type: "doctor",
+                          title: "Consultation requested",
+                          message: `We'll connect you with ${selectedDoctor.name} shortly.`
+                        });
+                        toast({
+                          title: "Consultation requested! ✅",
+                          description: `Your request to ${selectedDoctor.name} has been sent. Check the status in 'My Consultations'.`
+                        });
+                      } catch (err: any) {
+                        toast({
+                          variant: "destructive",
+                          title: "Request failed",
+                          description: err?.response?.data?.message || "Could not send consultation request."
+                        });
+                      } finally {
+                        setConsultationLoading(false);
+                      }
                     }}
                     className="px-6"
                   >
-                    Request Consultation
+                    {consultationLoading ? "Sending..." : "Request Consultation"}
                   </Button>
                 </div>
               </div>
@@ -508,41 +563,98 @@ export default function Dashboard() {
           {dietPlan && (
             <motion.div key="diet" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-300">
-                <CardHeader>
-                  <CardTitle>Diet Plan for {dietPlan.date}</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <div>
+                    <CardTitle className="text-lg">Weekly Ayurvedic Diet Plan</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">{(dietPlan as any).notes || "Prescribed Diet Plan"}</p>
+                  </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
+                  {/* Day Tabs */}
+                  {(dietPlan as any).fullPlan && (dietPlan as any).fullPlan.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto pb-2 border-b">
+                      {(dietPlan as any).fullPlan.map((d: any, idx: number) => {
+                        const dateLabel = d.formatted_date 
+                          ? d.formatted_date 
+                          : d.date 
+                          ? new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) 
+                          : "";
+                        return (
+                          <Button
+                            key={idx}
+                            size="sm"
+                            variant={selectedDayIdx === idx ? "default" : "outline"}
+                            className="text-xs rounded-full px-3 py-1.5 shrink-0 gap-1.5"
+                            onClick={() => setSelectedDayIdx(idx)}
+                          >
+                            <span className="font-semibold">{idx === 0 ? "Today" : `Day ${idx + 1}`}</span>
+                            {dateLabel && <span className="opacity-75 font-normal">({dateLabel})</span>}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+
+                  {/* Meals table for selected day */}
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-sm text-left text-gray-700">
                       <thead className="text-xs text-gray-500 uppercase bg-gray-100">
                         <tr>
-                          <th className="px-3 py-2">Time</th>
-                          <th className="px-3 py-2">Meal</th>
-                          <th className="px-3 py-2">Properties</th>
-                          <th className="px-3 py-2">Calories</th>
+                          <th className="px-3 py-2">Meal Type</th>
+                          <th className="px-3 py-2">Items / Meal</th>
+                          <th className="px-3 py-2">Nutritional Info</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {dietPlan.meals.map((m, idx) => (
-                          <tr key={idx}>
-                            <td className="px-3 py-2">{m.time}</td>
-                            <td className="px-3 py-2">{m.name}</td>
-                            <td className="px-3 py-2 flex flex-wrap gap-1">
-                              {m.properties.map((p, i) => (
-                                <Badge key={i} variant="secondary">{p}</Badge>
-                              ))}
-                            </td>
-                            <td className="px-3 py-2">{m.calories}</td>
-                          </tr>
-                        ))}
+                        {(() => {
+                          const activeDay = (dietPlan as any).fullPlan?.[selectedDayIdx];
+                          const mealsList = activeDay?.meals || dietPlan.meals || [];
+                          return mealsList.map((m: any, idx: number) => {
+                            const mealType = m.type || "Meal";
+                            const itemsText = Array.isArray(m.items) 
+                              ? m.items.map((i: any) => i.name).join(", ") 
+                              : (m.name || "Balanced Meal");
+                            const cals = m.total_nutrition?.calories || m.calories || 0;
+                            const protein = m.total_nutrition?.protein || 0;
+                            const carbs = m.total_nutrition?.carbs || 0;
+
+                            return (
+                              <tr key={idx}>
+                                <td className="px-3 py-2 font-medium text-primary">{mealType}</td>
+                                <td className="px-3 py-2">{itemsText}</td>
+                                <td className="px-3 py-2">
+                                  <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                                    <Badge variant="secondary">{cals} kcal</Badge>
+                                    {protein > 0 && <Badge variant="outline">{protein}g protein</Badge>}
+                                    {carbs > 0 && <Badge variant="outline">{carbs}g carbs</Badge>}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Dosha balance for active day */}
+                  {(dietPlan as any).fullPlan?.[selectedDayIdx]?.daily_dosha_balance && (
+                    <div className="p-3 rounded-lg bg-emerald-50 text-xs text-emerald-900 flex items-center justify-between flex-wrap gap-2">
+                      <span className="font-semibold">Daily Dosha Balance:</span>
+                      <div className="flex gap-2">
+                        {Object.entries((dietPlan as any).fullPlan[selectedDayIdx].daily_dosha_balance).map(([k, v]) => (
+                          <Badge key={k} variant="outline" className="bg-white/80">{k}: {String(v)}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
           )}
         </AnimatePresence>
+
       </div>
 
       {/* Floating AI Assistant */}

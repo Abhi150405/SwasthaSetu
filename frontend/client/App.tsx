@@ -43,7 +43,14 @@ const DoctorChatLazy = lazy(() => import("./pages/messages/[doctorId]"));
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { currentUser } = useAppState();
+  const { currentUser, authInitialized } = useAppState();
+  if (!authInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
   if (!currentUser) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
@@ -67,7 +74,16 @@ const AppRoutes = () => (
     <Route path="/login" element={<Login />} />
     <Route path="/register-user" element={<RegisterUser />} />
     <Route path="/register-doctor" element={<RegisterDoctor />} />
-    <Route path="/test-registration" element={<TestRegistration />} />
+    <Route
+      path="/test-registration"
+      element={
+        import.meta.env.DEV ? (
+          <TestRegistration />
+        ) : (
+          <Navigate to="/" replace />
+        )
+      }
+    />
     <Route
       element={
         <ProtectedRoute>

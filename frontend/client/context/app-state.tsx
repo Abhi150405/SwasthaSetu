@@ -5,8 +5,12 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import axios from "axios";
+import { endpoints } from "@/lib/api-config";
+
 
 export type Role = "patient" | "doctor";
+
 
 export type User = {
   [x: string]: any;
@@ -15,13 +19,16 @@ export type User = {
   email: string;
   role: Role;
   dosha?: "Vata" | "Pitta" | "Kapha" | null;
+  lastNotificationsSeenAt?: string | null;
 };
 
 export type Progress = {
   waterMl: number;
   waterGoalMl: number;
+  calorieGoalKcal?: number;
   mealsPlanned: number;
   mealsTaken: number;
+  doctorName?: string;
 };
 
 export type Meal = {
@@ -197,13 +204,20 @@ function save<T>(key: string, value: T) {
 export type AppState = {
   currentUser: User | null;
   setCurrentUser: (u: User | null) => void;
+  authInitialized: boolean;
   progress: Progress;
   setProgress: (p: Progress) => void;
   dietPlan: DietPlan | null;
-  setDietPlan: (p: DietPlan | null) => void;
+  setDietPlan: (plan: DietPlan | null) => void;
+  generateMockPlan: (overrides?: Partial<DietPlan>) => Promise<DietPlan | null>;
+  fetchDietPlan: () => Promise<void>;
+
   doctors: Doctor[];
   requests: ConsultRequest[];
   setRequests: React.Dispatch<React.SetStateAction<ConsultRequest[]>>;
+  fetchRequests: () => Promise<void>;
+  createConsultRequest: (payload: any) => Promise<any>;
+  updateConsultRequestStatus: (id: string, status: string, notes?: string) => Promise<any>;
   notifications: Notification[];
   addNotification: (n: Omit<Notification, "id" | "time" | "read">) => void;
   markAllRead: () => void;
@@ -211,12 +225,13 @@ export type AppState = {
   updateWater: (deltaMl: number) => void;
   markMealTaken: (mealType?: string) => void;
   fetchTodayProgress: () => Promise<void>;
-  generateMockPlan: (overrides?: Partial<DietPlan>) => DietPlan;
   conversations: Record<string, ChatMessage[]>;
   addMessage: (
     requestId: string,
     msg: Omit<ChatMessage, "id" | "requestId" | "ts"> & { ts?: number },
   ) => void;
+  setMessagingMounted: (mounted: boolean) => void;
+  setActiveChatId: (id: string | null) => void;
   userProfile: PatientProfile | null;
   setUserProfile: (p: PatientProfile) => void;
   doctorProfile: DoctorSelfProfile | null;
@@ -225,39 +240,11 @@ export type AppState = {
 
 const AppStateContext = createContext<AppState | null>(null);
 
-function makePlan(
-  meals?: Partial<ConsultRequest["plan"]>,
-): { time: string; name: string; calories: number; waterMl?: number }[] {
-  return meals && Array.isArray(meals) && meals.length
-    ? (meals as any)
-    : [
-      {
-        time: "08:00",
-        name: "Warm Spiced Oats",
-        calories: 320,
-        waterMl: 250,
-      },
-      {
-        time: "12:30",
-        name: "Moong Dal Khichdi",
-        calories: 450,
-        waterMl: 300,
-      },
-      {
-        time: "19:30",
-        name: "Steamed Veg + Ghee",
-        calories: 420,
-        waterMl: 250,
-      },
-    ];
-}
-
 export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(() =>
-    load<User | null>("app:currentUser", null),
-  );
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [progress, setProgress] = useState<Progress>(() =>
     load<Progress>("app:progress", {
       waterMl: 0,
@@ -266,303 +253,366 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
       mealsTaken: 0,
     }),
   );
-  const [dietPlan, setDietPlan] = useState<DietPlan | null>(() =>
-    load<DietPlan | null>("app:dietPlan", null),
-  );
-  const [doctors] = useState<Doctor[]>([
-    {
-      id: "d0",
-      name: "Dr. Victor Doom",
-      specialty: "Metabolic Care",
-      rating: 4.9,
-    },
-    {
-      id: "d1",
-      name: "Dr. Anaya Verma",
-      specialty: "Ayurvedic Diet",
-      rating: 4.9,
-    },
-    {
-      id: "d2",
-      name: "Dr. Rohan Mehta",
-      specialty: "Digestive Health",
-      rating: 4.7,
-    },
-    {
-      id: "d3",
-      name: "Dr. Kavya Iyer",
-      specialty: "Metabolic Care",
-      rating: 4.8,
-    },
-  ]);
-
-  const [requests, setRequests] = useState<ConsultRequest[]>(() => {
-    const loaded = load<ConsultRequest[]>("app:requests", []);
-    if (loaded && loaded.length) return loaded;
-
-    // Create seed data with multiple patients, each with their own profile
-    const seed: ConsultRequest[] = [
-      {
-        id: "req_1001",
-        userId: "u1001",
-        doctorId: "d1",
-        status: "accepted",
-        createdAt: new Date().toISOString(),
-        acceptedDate: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        patientName: "Riya Sharma",
-        patientDosha: "Pitta",
-        age: 29,
-        gender: "Female",
-        symptoms: "Frequent acidity and heartburn after meals",
-        weight: 58,
-        height: 165,
-        emergencyContact: "Raj Sharma (+91 98765 11111)",
-        lifestyle: "Early riser, yoga 5 days a week, vegetarian diet",
-        documents: [
-          { name: "Blood Test Report.pdf", url: "/mock/blood-test.pdf", type: "pdf" },
-          { name: "Endoscopy Report.pdf", url: "/mock/endoscopy.pdf", type: "pdf" },
-        ],
-        patientProfile: {
-          ...createBasicPatientProfile("P-1001", "Riya Sharma", "Pitta"),
-          age: 29,
-          gender: "Female",
-          phone: "+91 98765 00001",
-          address: "Delhi, India",
-          height: 165,
-          weight: 58,
-          allergies: "Peanuts",
-          conditions: "Acid reflux",
-          lifestyle: "Early riser, yoga 5 days a week",
-          medicalHistory: "Acidity issues",
-          sleepPattern: "7 hrs/night, deep sleep",
-          digestion: "Normal",
-          notes: "Often feels acidity post lunch",
-        },
-        plan: makePlan(),
-      },
-      {
-        id: "req_1002",
-        userId: "u1002",
-        doctorId: "",
-        status: "pending",
-        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        patientName: "Neha Gupta",
-        patientDosha: "Vata",
-        age: 25,
-        gender: "Female",
-        symptoms: "Chronic anxiety, insomnia, and digestive issues",
-        weight: 52,
-        height: 160,
-        emergencyContact: "Priya Gupta (+91 98765 22222)",
-        lifestyle: "Software engineer, irregular schedule, high stress",
-        documents: [
-          { name: "Anxiety Assessment.pdf", url: "/mock/anxiety.pdf", type: "pdf" },
-        ],
-        patientProfile: {
-          ...createBasicPatientProfile("P-1002", "Neha Gupta", "Vata"),
-          age: 25,
-          gender: "Female",
-          phone: "+91 98765 00002",
-          address: "Mumbai, India",
-          height: 160,
-          weight: 52,
-          allergies: "Shellfish",
-          conditions: "Anxiety, Insomnia",
-          lifestyle: "Software engineer, irregular schedule",
-          medicalHistory: "Anxiety disorders, sleep issues",
-          sleepPattern: "5-6 hrs/night, disturbed sleep",
-          digestion: "Poor",
-          notes: "High stress levels, poor eating habits",
-        },
-      },
-      {
-        id: "req_1003",
-        userId: "u1003",
-        doctorId: "d3",
-        status: "accepted",
-        createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-        acceptedDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        patientName: "Arjun Patel",
-        patientDosha: "Kapha",
-        age: 35,
-        gender: "Male",
-        symptoms: "Weight gain, low energy, and slow metabolism",
-        weight: 85,
-        height: 175,
-        emergencyContact: "Meera Patel (+91 98765 33333)",
-        lifestyle: "Sedentary job, minimal exercise, irregular eating",
-        documents: [
-          { name: "Metabolic Panel.pdf", url: "/mock/metabolic.pdf", type: "pdf" },
-          { name: "Thyroid Test.pdf", url: "/mock/thyroid.pdf", type: "pdf" },
-        ],
-        patientProfile: {
-          ...createBasicPatientProfile("P-1003", "Arjun Patel", "Kapha"),
-          age: 35,
-          gender: "Male",
-          phone: "+91 98765 00003",
-          address: "Ahmedabad, India",
-          height: 175,
-          weight: 85,
-          allergies: "Dairy",
-          conditions: "Obesity, Pre-diabetes",
-          lifestyle: "Sedentary job, minimal exercise",
-          medicalHistory: "Family history of diabetes",
-          sleepPattern: "8-9 hrs/night, heavy sleep",
-          digestion: "Slow",
-          notes: "Weight management needed, low energy",
-        },
-        plan: makePlan(),
-      },
-      {
-        id: "req_1004",
-        userId: "u1004",
-        doctorId: "",
-        status: "pending",
-        createdAt: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
-        patientName: "Priya Singh",
-        patientDosha: "Pitta",
-        age: 28,
-        gender: "Female",
-        symptoms: "Severe migraines and irregular menstrual cycles",
-        weight: 55,
-        height: 162,
-        emergencyContact: "Amit Singh (+91 98765 44444)",
-        lifestyle: "Marketing professional, high stress, irregular sleep",
-        documents: [
-          { name: "Hormone Panel.pdf", url: "/mock/hormones.pdf", type: "pdf" },
-          { name: "MRI Scan.pdf", url: "/mock/mri.pdf", type: "pdf" },
-        ],
-        patientProfile: {
-          ...createBasicPatientProfile("P-1004", "Priya Singh", "Pitta"),
-          age: 28,
-          gender: "Female",
-          phone: "+91 98765 00004",
-          address: "Bangalore, India",
-          height: 162,
-          weight: 55,
-          allergies: "None",
-          conditions: "Migraine, PCOS",
-          lifestyle: "Marketing professional, high stress",
-          medicalHistory: "Hormonal imbalances, frequent headaches",
-          sleepPattern: "6-7 hrs/night, light sleep",
-          digestion: "Strong",
-          notes: "Irregular periods, stress-related issues",
-        },
-      },
-    ];
-    return seed;
-  });
-
-  const [notifications, setNotifications] = useState<Notification[]>(() =>
-    load<Notification[]>("app:notifications", []),
-  );
-  const [conversations, setConversations] = useState<
-    Record<string, ChatMessage[]>
-  >(() => load<Record<string, ChatMessage[]>>("app:conversations", {}));
-
-  useEffect(() => save("app:currentUser", currentUser), [currentUser]);
-  useEffect(() => save("app:progress", progress), [progress]);
-  useEffect(() => save("app:dietPlan", dietPlan), [dietPlan]);
-  useEffect(() => save("app:requests", requests), [requests]);
-  useEffect(() => save("app:notifications", notifications), [notifications]);
-  useEffect(() => save("app:conversations", conversations), [conversations]);
-
-  const getUserProfileKey = () =>
-    `app:userProfile:${currentUser?.id || "anon"}`;
-  const getDoctorProfileKey = () =>
-    `app:doctorProfile:${currentUser?.id || "anon"}`;
-
-  const [userProfile, _setUserProfile] = useState<PatientProfile | null>(() => {
-    const cu = load<User | null>("app:currentUser", null);
-    const key = `app:userProfile:${cu?.id || "anon"}`;
-    return load<PatientProfile | null>(key, null);
-  });
-  const [doctorProfile, _setDoctorProfile] = useState<DoctorSelfProfile | null>(
-    () => {
-      const cu = load<User | null>("app:currentUser", null);
-      const key = `app:doctorProfile:${cu?.id || "anon"}`;
-      const fallback =
-        cu && cu.role === "doctor"
-          ? {
-            id: cu.id,
-            name: cu.name,
-            age: null,
-            gender: null,
-            licenseNo: "",
-            hospital: "",
-            specialty: "",
-            phone: "",
-            email: cu.email,
-            address: "",
-            bio: "",
-          }
-          : null;
-      return load<DoctorSelfProfile | null>(key, fallback);
-    },
-  );
+  const [dietPlan, setDietPlan] = useState<DietPlan | null>(null);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
 
   useEffect(() => {
-    if (!currentUser) return;
-    if (currentUser.role === "patient" && !userProfile) {
-      _setUserProfile(
-        createBasicPatientProfile(
-          `P-${currentUser.id}`,
-          currentUser.name,
-          currentUser.dosha || null,
-        ),
-      );
-    }
-    if (currentUser.role === "doctor" && !doctorProfile) {
-      _setDoctorProfile({
-        id: currentUser.id,
-        name: currentUser.name,
-        age: null,
-        gender: null,
-        licenseNo: "",
-        hospital: "",
-        specialty: "",
-        phone: "",
-        email: currentUser.email,
-        address: "",
-        bio: "",
-      });
-    }
+    const fetchDoctors = async () => {
+      try {
+        const response = await fetch("/api/doctor/all");
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+          const registeredDoctors = result.data.map((d: any) => ({
+            id: d._id,
+            name: d.name,
+            specialty: d.specialty || "General Medicine",
+            rating: 4.8, // Default rating as backend doesn't store this yet
+            hospital: d.hospital,
+            bio: d.bio,
+            experience: d.experience
+          }));
+          setDoctors(registeredDoctors);
+        }
+      } catch (err) {
+        console.error("Failed to fetch doctors:", err);
+      }
+    };
+    fetchDoctors();
   }, [currentUser]);
 
-  useEffect(() => {
-    save(getUserProfileKey(), userProfile);
-  }, [userProfile, currentUser]);
-  useEffect(() => {
-    save(getDoctorProfileKey(), doctorProfile);
-  }, [doctorProfile, currentUser]);
+  const [requests, setRequests] = useState<ConsultRequest[]>([]);
 
-  const setUserProfile = (p: PatientProfile) => _setUserProfile(p);
-  const setDoctorProfile = (p: DoctorSelfProfile) => _setDoctorProfile(p);
+  const fetchRequests = async () => {
+    if (!currentUser) return;
+    try {
+      const endpoint = currentUser.role === "doctor" ? "/api/consultation/doctor" : "/api/consultation/patient";
+      const response = await fetch(endpoint);
+      const result = await response.json();
+      if (result.success && result.data) {
+        const mapped = result.data.map((c: any) => ({
+          ...c,
+          userId: c.patientId,
+        }));
+        setRequests(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to fetch requests:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, [currentUser]);
+
+  const createConsultRequest = async (payload: any) => {
+    try {
+      const response = await fetch("/api/consultation/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (result.success) {
+        await fetchRequests();
+      }
+      return result;
+    } catch (err) {
+      console.error("Failed to create request:", err);
+      return { success: false, error: err };
+    }
+  };
+
+  const updateConsultRequestStatus = async (id: string, status: string, notes?: string) => {
+    try {
+      const response = await fetch(`/api/consultation/${id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, notes }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        await fetchRequests();
+      }
+      return result;
+    } catch (err) {
+      console.error("Failed to update status:", err);
+      return { success: false, error: err };
+    }
+  };
+
+  const [localNotifications, setLocalNotifications] = useState<Notification[]>([]);
+  const [lastSeenTime, setLastSeenTime] = useState<number>(0);
+  const [conversations, setConversations] = useState<Record<string, ChatMessage[]>>({});
+  const [messagingMounted, setMessagingMounted] = useState(false);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentUser?.lastNotificationsSeenAt) {
+      setLastSeenTime(new Date(currentUser.lastNotificationsSeenAt).getTime());
+    } else {
+      setLastSeenTime(0);
+    }
+  }, [currentUser?.lastNotificationsSeenAt]);
+
+  const backendNotifications = useMemo<Notification[]>(() => {
+    if (!currentUser) return [];
+    const notifs: Notification[] = [];
+    
+    // Derived from requests
+    requests.forEach(r => {
+      const ts = r.acceptedDate ? new Date(r.acceptedDate).getTime() : (r.createdAt ? new Date(r.createdAt).getTime() : 0);
+      if (ts > lastSeenTime) {
+        if (currentUser.role === 'patient') {
+          if (r.status === 'accepted') {
+            notifs.push({ id: `req_${r.id}`, type: "success", title: "Consultation Accepted", message: "Your request was accepted.", time: new Date(ts).toISOString(), read: false });
+          } else if (r.status === 'rejected') {
+            notifs.push({ id: `req_${r.id}`, type: "warning", title: "Consultation Rejected", message: "Your request was rejected.", time: new Date(ts).toISOString(), read: false });
+          }
+        } else if (currentUser.role === 'doctor') {
+          if (r.status === 'pending') {
+            notifs.push({ id: `req_${r.id}`, type: "info", title: "New Consultation Request", message: "You have a new patient request.", time: new Date(ts).toISOString(), read: false });
+          }
+        }
+      }
+    });
+
+    // Derived from unread messages
+    Object.values(conversations).forEach(thread => {
+      thread.forEach(msg => {
+        if (msg.ts > lastSeenTime && msg.from !== (currentUser.role === 'doctor' ? 'doctor' : 'patient') && msg.from !== 'system') {
+          notifs.push({ id: `msg_${msg.id}`, type: "info", title: "New Message", message: "You have received a new message.", time: new Date(msg.ts).toISOString(), read: false });
+        }
+      });
+    });
+
+    return notifs.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+  }, [requests, conversations, currentUser, lastSeenTime]);
+
+  const notifications = useMemo(() => {
+    return [...localNotifications, ...backendNotifications].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 50);
+  }, [localNotifications, backendNotifications]);
+
+  const getOtherUserId = (reqId: string) => {
+    const req = requests.find((r) => r.id === reqId);
+    if (!req) return reqId; // Fallback to using the passed ID directly
+    return currentUser?.role === "doctor" ? req.userId : req.doctorId;
+  };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (messagingMounted) {
+      const fetchConversationsList = async () => {
+        try {
+          await fetch("/api/messages/conversations");
+        } catch (e) {
+          console.error("Failed to fetch conversations list:", e);
+        }
+      };
+      fetchConversationsList();
+      interval = setInterval(fetchConversationsList, 9000);
+    }
+    return () => clearInterval(interval);
+  }, [messagingMounted]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (activeChatId) {
+      const otherUserId = getOtherUserId(activeChatId);
+      if (!otherUserId) return;
+
+      const fetchChatHistory = async () => {
+        try {
+          const res = await fetch(`/api/messages/${otherUserId}`);
+          const result = await res.json();
+          if (result.success) {
+            setConversations((prev) => ({
+              ...prev,
+              [activeChatId]: result.data.map((m: any) => ({
+                id: m.id,
+                requestId: activeChatId,
+                from: m.sender,
+                text: m.text,
+                ts: new Date(m.createdAt).getTime(),
+              })),
+            }));
+          }
+        } catch (e) {
+          console.error("Failed to fetch chat history:", e);
+        }
+      };
+
+      fetch(`/api/messages/${otherUserId}/read`, { method: "PUT" }).catch(console.error);
+      fetchChatHistory();
+      interval = setInterval(fetchChatHistory, 3500);
+    }
+    return () => clearInterval(interval);
+  }, [activeChatId, requests, currentUser]);
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        let response = await fetch("/api/auth/me", {
+          credentials: "include",
+        });
+
+        // If access token expired (401), attempt auto-refresh via refresh token cookie
+        if (response.status === 401) {
+          try {
+            const refreshRes = await fetch("/api/auth/refresh", {
+              method: "POST",
+              credentials: "include",
+            });
+            if (refreshRes.ok) {
+              response = await fetch("/api/auth/me", {
+                credentials: "include",
+              });
+            }
+          } catch (e) {
+            console.error("Token auto-refresh failed:", e);
+          }
+        }
+
+        if (!response.ok) return;
+
+        const result = await response.json();
+        if (result?.id) {
+          setCurrentUser({
+            id: result.id,
+            name: result.name,
+            email: result.email,
+            role: result.role,
+            dosha: result.dosha ?? result.ayurvedic_category ?? null,
+          });
+          if (result.role === 'doctor') {
+            _setDoctorProfile({
+              id: result.id,
+              name: result.name,
+              age: result.dob ? new Date().getFullYear() - new Date(result.dob).getFullYear() : null,
+              gender: result.gender || null,
+              licenseNo: result.licenseNo || "",
+              hospital: result.hospital || "",
+              specialty: result.specialty || "",
+              phone: result.phone || result.contact || "",
+              email: result.email,
+              address: result.address?.[0]?.city || result.address?.[0] || "",
+              bio: result.bio || "",
+            });
+          } else {
+            fetch(`/api/patient/profile/${result.id}`, { credentials: "include" })
+              .then(res => res.json())
+              .then(data => {
+                 if (data.success) {
+                    const dbUser = data.data;
+                    _setUserProfile({
+                        id: dbUser.id,
+                        name: dbUser.name,
+                        dosha: dbUser.ayurvedic_category || dbUser.dosha || null,
+                        age: dbUser.dob ? new Date().getFullYear() - new Date(dbUser.dob).getFullYear() : null,
+                        gender: dbUser.gender || null,
+                        phone: dbUser.phone || dbUser.contact || "",
+                        address: dbUser.address?.[0]?.city || dbUser.address?.[0] || "",
+                        height: dbUser.height || null,
+                        weight: dbUser.weight || null,
+                        lifestyle: dbUser.lifestyle || "",
+                        medicalHistory: dbUser.medicalHistory || "",
+                        allergies: dbUser.allergies ? (Array.isArray(dbUser.allergies) ? dbUser.allergies.join(", ") : dbUser.allergies) : "",
+                        conditions: dbUser.diseases ? (Array.isArray(dbUser.diseases) ? dbUser.diseases.join(", ") : dbUser.diseases) : "",
+                        medications: dbUser.medications || "",
+                        habits: dbUser.habits || "",
+                        sleepPattern: dbUser.sleepPattern || "",
+                        digestion: dbUser.digestion || null,
+                        emergencyContact: dbUser.emergencyContact || "",
+                        notes: "",
+                        documents: []
+                    });
+                 }
+              })
+              .catch(console.error);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to restore session:", error);
+      } finally {
+        setAuthInitialized(true);
+      }
+    };
+
+    restoreSession();
+  }, []);
+
+  useEffect(() => save("app:progress", progress), [progress]);
+  // useEffect(() => save("app:dietPlan", dietPlan), [dietPlan]);
+  // useEffect(() => save("app:requests", requests), [requests]);
+  // useEffect(() => save("app:notifications", notifications), [notifications]);
+  // useEffect(() => save("app:conversations", conversations), [conversations]);
+
+  const [userProfile, _setUserProfile] = useState<PatientProfile | null>(null);
+  const [doctorProfile, _setDoctorProfile] = useState<DoctorSelfProfile | null>(null);
+
+  const setUserProfile = async (p: PatientProfile) => {
+    _setUserProfile(p);
+    try {
+      await fetch(`/api/patient/profile/${p.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(p),
+      });
+    } catch (error) {
+      console.error("Failed to update patient profile:", error);
+    }
+  };
+
+  const setDoctorProfile = async (p: DoctorSelfProfile) => {
+    _setDoctorProfile(p);
+    try {
+      await fetch(`/api/doctor/profile/${p.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(p),
+      });
+    } catch (error) {
+      console.error("Failed to update doctor profile:", error);
+    }
+  };
 
   const addNotification = (n: Omit<Notification, "id" | "time" | "read">) => {
-    setNotifications((prev) =>
+    setLocalNotifications((prev) =>
       [
         { id: uid("ntf"), time: new Date().toISOString(), read: false, ...n },
         ...prev,
       ].slice(0, 50),
     );
   };
-  const markAllRead = () => setNotifications([]);
-  const markNotificationRead = (id: string) =>
-    setNotifications((prev) => prev.filter((x) => x.id !== id));
+  const markAllRead = async () => {
+    setLocalNotifications([]);
+    if (currentUser) {
+      setLastSeenTime(Date.now());
+      try {
+        await fetch("/api/auth/notifications-seen", { method: "PUT" });
+      } catch (error) {
+        console.error("Failed to mark notifications seen:", error);
+      }
+    }
+  };
+  const markNotificationRead = (id: string) => {
+    setLocalNotifications((prev) => prev.filter((x) => x.id !== id));
+  };
 
   const fetchTodayProgress = async () => {
     if (!currentUser || currentUser.role !== "patient") return;
     try {
-      const response = await fetch("/api/progress/today");
+      const response = await fetch("/api/progress/today", { credentials: "include" });
       const result = await response.json();
       if (result.success && result.data) {
         const data = result.data;
         setProgress({
           waterMl: data.water_intake_ml || 0,
-          waterGoalMl: 2500, // Or fetch from profile/settings
+          waterGoalMl: data.target_water_ml || 2500,
+          calorieGoalKcal: data.target_calories || 2000,
           mealsPlanned: 3,
           mealsTaken: data.meal_log?.filter((m: any) => m.status === "completed").length || 0,
+          doctorName: data.doctor_name || "Dr. Sharma",
         });
       }
     } catch (error) {
@@ -570,9 +620,43 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  // Fetch Diet Plan helper using axios and fallback patientId
+  const fetchDietPlan = async () => {
+    if (!currentUser) return;
+    const patientId = (currentUser as any).id || (currentUser as any)._id;
+    if (!patientId) return;
+
+    try {
+      const response = await axios.get(`${endpoints.diet}/patient/${patientId}`, { withCredentials: true });
+      const result = response.data;
+      if (result.success && result.data && result.data.length > 0) {
+        const latestPlan = result.data[0];
+        if (latestPlan.plan && latestPlan.plan.length > 0) {
+          const day1 = latestPlan.plan[0];
+          setDietPlan({
+            date: day1.day ? `Day ${day1.day}` : new Date().toISOString().slice(0, 10),
+            notes: latestPlan.suggestion || "Personalized Ayurvedic Plan",
+            ayurvedic_analysis: latestPlan.ayurvedic_analysis,
+            fullPlan: latestPlan.plan,
+            meals: (day1.meals || []).map((m: any) => ({
+              time: m.type === "Breakfast" ? "08:00" : m.type === "Lunch" ? "13:00" : m.type === "Dinner" ? "19:00" : "16:00",
+              name: (m.items || []).map((i: any) => i.name).join(", ") || "Healthy Meal",
+              calories: m.total_nutrition?.calories || 0,
+              properties: [m.type]
+            }))
+          } as any);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch diet plans:", error);
+    }
+  };
+
   useEffect(() => {
     fetchTodayProgress();
+    fetchDietPlan();
   }, [currentUser]);
+
 
   const updateWater = async (deltaMl: number) => {
     // Optimistic update
@@ -586,6 +670,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: deltaMl }),
+        credentials: "include",
       });
 
       addNotification({
@@ -613,6 +698,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ meal_type: type }),
+        credentials: "include",
       });
 
       addNotification({
@@ -625,48 +711,53 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const generateMockPlan = (overrides?: Partial<DietPlan>): DietPlan => {
-    const base: DietPlan = {
-      date: new Date().toISOString().slice(0, 10),
-      notes: "Personalized as per dosha balance with sattvic emphasis",
-      meals: [
-        {
-          time: "08:00",
-          name: "Warm Spiced Oats",
-          calories: 320,
-          properties: ["Warm", "Rasa: Madhura", "Sattvic"],
-        },
-        {
-          time: "12:30",
-          name: "Moong Dal Khichdi",
-          calories: 450,
-          properties: ["Light", "Tridoshic", "Sattvic"],
-        },
-        {
-          time: "16:00",
-          name: "Herbal Tea + Nuts",
-          calories: 180,
-          properties: ["Warm", "Rasa: Kashaya"],
-        },
-        {
-          time: "19:30",
-          name: "Steamed Veg + Ghee",
-          calories: 420,
-          properties: ["Light", "Grounding"],
-        },
-      ],
-    };
-    const plan = { ...base, ...overrides };
-    setDietPlan(plan);
-    addNotification({
-      type: "diet",
-      title: "Diet plan generated",
-      message: `7-day plan for ${plan.date} created.`,
-    });
-    return plan;
+  const generateMockPlan = async (overrides?: Partial<DietPlan>): Promise<DietPlan | null> => {
+    if (!currentUser) return null;
+    try {
+      const response = await fetch("/api/diet/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: currentUser.id,
+          age: userProfile?.age || 30,
+          weight: userProfile?.weight || 70,
+          height: userProfile?.height || 170,
+          conditions: userProfile?.conditions ? userProfile.conditions.split(",").map(c => c.trim()) : [],
+          dietary_preferences: ["Indian", "Vegetarian"],
+          goals: "Holistic wellness and Ayurvedic balance",
+          gender: userProfile?.gender || "Male",
+          days: 7
+        })
+      });
+      const result = await response.json();
+      if (result.success && result.data && result.data.plan && result.data.plan.length > 0) {
+        const day1 = result.data.plan[0];
+        const plan: DietPlan = {
+          date: day1.date || new Date().toISOString().slice(0, 10),
+          notes: result.data.suggestion || "Personalized Ayurvedic plan",
+          meals: day1.meals.map((m: any) => ({
+            time: m.type === "Breakfast" ? "08:00" : m.type === "Lunch" ? "13:00" : m.type === "Dinner" ? "19:00" : "16:00",
+            name: m.items.map((i: any) => i.name).join(", "),
+            calories: m.total_nutrition?.calories || 0,
+            properties: [m.type]
+          })),
+          ...overrides
+        };
+        setDietPlan(plan);
+        addNotification({
+          type: "diet",
+          title: "Diet plan generated",
+          message: `7-day plan for ${plan.date} created.`,
+        });
+        return plan;
+      }
+    } catch (error) {
+      console.error("Failed to generate diet plan:", error);
+    }
+    return null;
   };
 
-  const addMessage: AppState["addMessage"] = (requestId, msg) => {
+  const addMessage: AppState["addMessage"] = async (requestId, msg) => {
     setConversations((prev) => {
       const next = { ...prev };
       const list = next[requestId] ? [...next[requestId]] : [];
@@ -680,12 +771,28 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
       next[requestId] = list.slice(-200);
       return next;
     });
+
+    if (msg.from !== "system" && msg.from === (currentUser?.role === "doctor" ? "doctor" : "patient")) {
+      const otherUserId = getOtherUserId(requestId);
+      if (otherUserId) {
+        try {
+          await fetch(`/api/messages/${otherUserId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: msg.text }),
+          });
+        } catch (e) {
+          console.error("Failed to send message:", e);
+        }
+      }
+    }
   };
 
   const value = useMemo<AppState>(
     () => ({
       currentUser,
       setCurrentUser,
+      authInitialized,
       progress,
       setProgress,
       dietPlan,
@@ -693,6 +800,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
       doctors,
       requests,
       setRequests,
+      fetchRequests,
+      createConsultRequest,
+      updateConsultRequestStatus,
       notifications,
       addNotification,
       markAllRead,
@@ -701,8 +811,12 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
       markMealTaken,
       fetchTodayProgress,
       generateMockPlan,
+      fetchDietPlan,
       conversations,
+
       addMessage,
+      setMessagingMounted,
+      setActiveChatId,
       userProfile,
       setUserProfile,
       doctorProfile,
@@ -710,6 +824,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
     }),
     [
       currentUser,
+      authInitialized,
       progress,
       dietPlan,
       doctors,

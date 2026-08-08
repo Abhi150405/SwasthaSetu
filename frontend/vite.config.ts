@@ -16,7 +16,7 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
-    port: 8080,
+    port: 5173,
     fs: {
       allow: ["."],
     },
@@ -34,7 +34,7 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5001',
         changeOrigin: true,
       },
     },

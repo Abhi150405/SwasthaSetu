@@ -7,6 +7,7 @@ import axios from "axios";
 import { useAppState } from "@/context/app-state";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { QUIZ } from "@/data/Quiz";
+import { endpoints } from "@/lib/api-config";
 
 // —— Clean Google-style UI Components ——
 const Card = ({ children, className = "" }) => (
@@ -44,12 +45,12 @@ const Button = ({ children, className = "", variant = "primary", ...props }) => 
 
 const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { className?: string }>(
   ({ className = "", ...props }, ref) => (
-    <motion.input
+    <input
       ref={ref}
-      whileFocus={{ scale: 1.01 }}
       className={`w-full px-4 py-3 rounded-md border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all duration-300 text-sm ${className}`}
       {...props}
     />
+
   )
 );
 
@@ -105,7 +106,7 @@ const formSchema = z.object({
     .optional(),
 });
 
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = z.input<typeof formSchema>;
 
 // —— Animation Variants ——
 const stepVariants = {
@@ -554,61 +555,44 @@ export default function Register() {
         message: `Please answer all ${QUIZ.length} quiz questions.`,
       } as any);
       setActiveStep(1);
-      setIsLoading(false);
       return;
     }
 
-    const formData = new FormData();
-    formData.append("name", values.name);
-    formData.append("email", values.email);
-    formData.append("password", values.password);
-    formData.append("dob", values.dob);
-    formData.append("gender", values.gender);
-    formData.append("contact", values.contact);
-    formData.append("ayurvedic_category", determineDosha(values.answers));
-    formData.append("mode", "online");
-    formData.append("address", JSON.stringify([values.address]));
-
-    if (values.height) {
-      formData.append("height", values.height);
-    }
-    if (values.weight) {
-      formData.append("weight", values.weight);
-    }
-    if (values.allergies) {
-      formData.append("allergies", values.allergies);
-    }
-    if (values.diseases) {
-      formData.append("diseases", values.diseases);
-    }
-    if (values.medical_history) {
-      formData.append("medical_history", values.medical_history);
-    }
-
     try {
-      console.log('Submitting registration with data:', {
+      let uploadedUrl: string | undefined = undefined;
+
+
+      if (values.medical_history && values.medical_history instanceof File) {
+        try {
+          const formData = new FormData();
+          formData.append("file", values.medical_history);
+          const uploadRes = await axios.post("/api/files/upload", formData);
+          if (uploadRes.data?.url) {
+            uploadedUrl = uploadRes.data.url;
+          }
+        } catch (uploadErr) {
+          console.error("Failed to upload medical history during registration:", uploadErr);
+        }
+      }
+
+      const payload = {
         name: values.name,
         email: values.email,
-        gender: values.gender,
+        password: values.password,
         dob: values.dob,
+        gender: values.gender,
         contact: values.contact,
-        address: values.address,
-        height: values.height,
-        weight: values.weight,
         ayurvedic_category: determineDosha(values.answers),
-        allergies: values.allergies,
-        diseases: values.diseases,
-        hasFile: !!values.medical_history
-      });
+        mode: "online",
+        medical_history_url: uploadedUrl,
+      };
+
+
+      console.log('Submitting registration with data:', payload);
 
       const response = await axios.post(
-        "/api/patient/register-patient",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
+        `${endpoints.auth}/register/patient`,
+        payload
       );
 
       // Registration successful - redirect to login page

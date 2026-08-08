@@ -20,67 +20,31 @@ type Message = {
 export default function DoctorChat() {
   const { doctorId } = useParams<{ doctorId: string }>();
   const navigate = useNavigate();
-  const { currentUser, doctors } = useAppState();
+  const { currentUser, doctors, setMessagingMounted, setActiveChatId, conversations, addMessage } = useAppState();
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  useEffect(() => {
+    setMessagingMounted(true);
+    return () => setMessagingMounted(false);
+  }, []);
+  
+  // Use doctorId as the active chat (which acts as request id or other user id in our mapping)
+  useEffect(() => {
+    setActiveChatId(doctorId || null);
+    return () => setActiveChatId(null);
+  }, [doctorId]);
+  const [isLoading, setIsLoading] = useState(false);
+  const msgs = doctorId ? (conversations[doctorId] || []) : [];
 
   // Get the current doctor's details
   const doctor = doctors.find(d => d.id === doctorId);
 
-  // Simulate loading messages
-  useEffect(() => {
-    if (!doctorId || !currentUser) return;
-
-    // Simulate API call to fetch messages
-    const timer = setTimeout(() => {
-      // Mock messages for demo
-      const mockMessages: Message[] = [
-        {
-          id: '1',
-          text: 'Hello! How can I help you today?',
-          sender: 'doctor',
-          timestamp: new Date(Date.now() - 3600000), // 1 hour ago
-        },
-        {
-          id: '2',
-          text: 'I was wondering about my recent diet plan.',
-          sender: 'user',
-          timestamp: new Date(Date.now() - 1800000), // 30 minutes ago
-        },
-      ];
-      
-      setMessages(mockMessages);
-      setIsLoading(false);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [doctorId, currentUser]);
-
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !currentUser || !doctor) return;
+    if (!message.trim() || !currentUser || !doctorId) return;
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      text: message,
-      sender: 'user',
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, newMessage]);
+    addMessage(doctorId, { from: 'patient', text: message });
     setMessage('');
-
-    // Simulate doctor's response
-    setTimeout(() => {
-      const reply: Message = {
-        id: (Date.now() + 1).toString(),
-        text: 'Thank you for your message. I will review your query and get back to you shortly.',
-        sender: 'doctor',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, reply]);
-    }, 1000);
   };
 
   if (!currentUser) {
@@ -120,7 +84,7 @@ export default function DoctorChat() {
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [msgs]);
 
   return (
     <div className="h-screen flex flex-col bg-muted/20">
@@ -213,7 +177,7 @@ export default function DoctorChat() {
                     <p className="text-muted-foreground">Loading messages...</p>
                   </div>
                 </div>
-              ) : messages.length === 0 ? (
+              ) : msgs.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center py-12 px-4 text-center">
                   <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
                     <MessageCircle className="h-8 w-8 text-primary" />
@@ -225,17 +189,17 @@ export default function DoctorChat() {
                 </div>
               ) : (
                 <>
-                  {messages.map((msg, index) => {
-                    const isUser = msg.sender === 'user';
+                  {msgs.map((msg, index) => {
+                    const isUser = msg.from === 'patient' || (msg.from as string) === 'user';
                     const showDate = index === 0 || 
-                      new Date(msg.timestamp).toDateString() !== new Date(messages[index - 1].timestamp).toDateString();
+                      new Date(msg.ts).toDateString() !== new Date(msgs[index - 1].ts).toDateString();
                     
                     return (
                       <React.Fragment key={msg.id}>
                         {showDate && (
                           <div className="flex justify-center my-4">
                             <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
-                              {format(new Date(msg.timestamp), 'MMMM d, yyyy')}
+                              {format(new Date(msg.ts), 'MMMM d, yyyy')}
                             </span>
                           </div>
                         )}
@@ -251,7 +215,7 @@ export default function DoctorChat() {
                               "text-xs mt-1 flex justify-end",
                               isUser ? "text-primary-foreground/70" : "text-muted-foreground"
                             )}>
-                              {format(new Date(msg.timestamp), 'h:mm a')}
+                              {format(new Date(msg.ts), 'h:mm a')}
                             </div>
                           </div>
                         </div>

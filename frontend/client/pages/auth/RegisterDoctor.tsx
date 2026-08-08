@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useAppState } from "@/context/app-state";
 import { CheckCircle2, Loader2, Stethoscope, Award, MapPin } from "lucide-react";
 import axios from "axios";
+import { endpoints } from "@/lib/api-config";
 
 // —— Clean Google-style UI Components ——
 const Card = ({ children, className = "" }) => (
@@ -136,7 +137,7 @@ export default function RegisterDoctor() {
         name,
         email: email.toLowerCase(),
         password,
-        dob: age ? `${new Date().getFullYear() - parseInt(age)}-01-01` : new Date().toISOString().split('T')[0], // Convert age to approximate DOB
+        dob: age ? `${new Date().getFullYear() - parseInt(age)}-01-01T00:00:00Z` : new Date().toISOString(),
         gender: gender ? gender.toLowerCase() : 'prefer not to say',
         contact: phone || '0000000000',
         address: location ? { city: location, state: '', country: '' } : { city: '', state: '', country: '' },
@@ -150,7 +151,7 @@ export default function RegisterDoctor() {
       console.log('Sending doctor registration data:', doctorData);
 
       // Make API call to register doctor
-      const response = await axios.post('/api/doctor/register-doctor', doctorData);
+      const response = await axios.post(`${endpoints.auth}/register/doctor`, doctorData);
 
       console.log('Doctor registration response:', response.data);
 
@@ -170,7 +171,13 @@ export default function RegisterDoctor() {
 
       if (err.response) {
         // Server responded with error status
-        errorMessage = err.response.data?.message || `Server error: ${err.response.status}`;
+        if (Array.isArray(err.response.data?.detail)) {
+          errorMessage = err.response.data.detail
+            .map((d: any) => `${d.loc && d.loc.length > 0 ? d.loc[d.loc.length - 1] + ': ' : ''}${d.msg}`)
+            .join('; ');
+        } else {
+          errorMessage = err.response.data?.detail || err.response.data?.message || `Server error: ${err.response.status}`;
+        }
       } else if (err.request) {
         // Request was made but no response received
         errorMessage = "Could not connect to the server. Please check your internet connection.";
@@ -178,6 +185,7 @@ export default function RegisterDoctor() {
         // Something else happened
         errorMessage = err.message || errorMessage;
       }
+      setError(errorMessage);
 
     } finally {
       setIsLoading(false);

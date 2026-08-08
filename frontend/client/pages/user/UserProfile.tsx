@@ -12,9 +12,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Eye, FileText, ExternalLink, Download } from "lucide-react";
 import axios from "axios";
+
+import { endpoints } from "@/lib/api-config";
 
 export default function UserProfile() {
   const { currentUser, userProfile, setUserProfile } = useAppState();
@@ -22,6 +31,10 @@ export default function UserProfile() {
   const [form, setForm] = useState<PatientProfile | null>(userProfile);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [selectedDoc, setSelectedDoc] = useState<{ name: string; url: string; type?: string } | null>(null);
+  const [showDocViewer, setShowDocViewer] = useState(false);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -35,22 +48,19 @@ export default function UserProfile() {
       setError(null);
       
       try {
-        console.log("Fetching profile for user:", currentUser.id); // Debug log
+        console.log("Fetching profile for user:", currentUser.id);
         
         const response = await axios.get(
-          `/api/patient/profile/68d3090af8634f295f7d17ac`,
+          `${endpoints.patient}/profile/${currentUser.id}`,
           {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem('accessToken')}` // Add auth header if needed
-            }
+            withCredentials: true
           }
         );
         
-        console.log("API Response:", response.data); // Debug log
+        console.log("API Response:", response.data);
         
         const fetchedProfile = response.data.data;
         
-        // Map backend data to frontend PatientProfile type
         const formattedProfile = {
           id: fetchedProfile._id,
           name: fetchedProfile.name,
@@ -58,76 +68,117 @@ export default function UserProfile() {
           age: fetchedProfile.dob ? new Date().getFullYear() - new Date(fetchedProfile.dob).getFullYear() : null,
           dosha: fetchedProfile.ayurvedic_category,
           phone: fetchedProfile.contact,
-          address: fetchedProfile.address?.[0]?.city || fetchedProfile.address?.[0] || "", // Handle both object and string
-          height: null, // These fields are not in your schema
-          weight: null,
-          lifestyle: "",
-          medicalHistory: fetchedProfile.medical_history?.[0] || "",
-          allergies: fetchedProfile.allergies?.[0] || "",
-          conditions: fetchedProfile.diseases?.[0] || "",
+          address: typeof fetchedProfile.address === 'object' && fetchedProfile.address !== null 
+                   ? `${fetchedProfile.address.city || ''}, ${fetchedProfile.address.state || ''}` 
+                   : fetchedProfile.address || "",
+          height: fetchedProfile.height || null,
+          weight: fetchedProfile.weight || null,
+          medicalHistory: Array.isArray(fetchedProfile.medical_history) ? fetchedProfile.medical_history.join(", ") : (fetchedProfile.medical_history || ""),
+          allergies: Array.isArray(fetchedProfile.allergies) ? fetchedProfile.allergies.join(", ") : (fetchedProfile.allergies || ""),
+          conditions: Array.isArray(fetchedProfile.diseases) ? fetchedProfile.diseases.join(", ") : (fetchedProfile.diseases || ""),
           medications: "",
           sleepPattern: "",
           digestion: "",
           notes: "",
-          documents: [],
-          habits: "", // Add default value
-          emergencyContact: "", // Add default value
+          documents: fetchedProfile.documents || [],
+          medical_history_url: fetchedProfile.medical_history_url || null,
+          lifestyle: "",
+          habits: "",
+          emergencyContact: "",
         };
 
-        console.log("Formatted profile:", formattedProfile); // Debug log
-        
-        setForm(formattedProfile);
-        setUserProfile(formattedProfile);
-        
-      } catch (err) {
-        console.error("Failed to fetch user profile:", err);
-        
-        // Better error handling
-        if (err.response) {
-          // Server responded with error status
-          const errorMessage = err.response.data?.message || `Server error: ${err.response.status}`;
-          setError(errorMessage);
-        } else if (err.request) {
-          // Network error
-          setError("Network error. Please check your connection and try again.");
-        } else {
-          // Other error
-          setError("An unexpected error occurred. Please try again.");
-        }
+        setForm(formattedProfile as any);
+        setUserProfile(formattedProfile as any);
+      } catch (err: any) {
+        console.error("Error fetching profile:", err);
+        setError("Failed to fetch user profile");
       } finally {
         setIsLoading(false);
       }
     };
 
-    // Always fetch if we don't have a userProfile or if we have a currentUser
-    if (!userProfile && currentUser) {
-      fetchUserProfile();
-    } else if (userProfile) {
+    fetchUserProfile();
+  }, [currentUser]);
+
+  const onChange = (field: keyof PatientProfile, val: any) => {
+    if (!form) return;
+    setForm({ ...form, [field]: val });
+  };
+
+  const handleSave = async () => {
+    if (!form || !currentUser?.id) return;
+    
+    try {
+      setIsLoading(true);
+
+      const updatePayload = {
+        name: form.name,
+        contact: form.phone,
+        gender: form.gender,
+        height: form.height,
+        weight: form.weight,
+        ayurvedic_category: form.dosha,
+        documents: form.documents,
+        allergies: form.allergies,
+        diseases: form.conditions,
+        medical_history: form.medicalHistory,
+        medical_history_url: (form as any).medical_history_url,
+      };
+
+      const response = await axios.put(
+        `${endpoints.patient}/profile/${currentUser.id}`,
+        updatePayload,
+        { withCredentials: true }
+      );
+
+      if (response.data.success) {
+        setUserProfile(form);
+        alert("Profile updated successfully!");
+      }
+    } catch (err) {
+      console.error("Error saving profile:", err);
+      alert("Failed to save profile changes.");
+    } finally {
       setIsLoading(false);
     }
-  }, [currentUser, userProfile, setUserProfile]);
+  };
 
-  useEffect(() => {
-    setForm(userProfile);
-  }, [userProfile]);
-
-  const onChange = <K extends keyof PatientProfile>(
-    key: K,
-    value: PatientProfile[K],
-  ) => {
-    if (!form) return;
-    setForm({ ...form, [key]: value });
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !form) return;
+    setIsUploadingDoc(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axios.post("/api/files/upload", formData, { withCredentials: true });
+      if (res.data?.url) {
+        const docType = file.type.includes("pdf") ? "pdf" : "image";
+        const next = [
+          ...((form.documents as any[]) || []),
+          { name: file.name, url: res.data.url, type: docType, date: new Date().toISOString() },
+        ];
+        setForm({ ...form, documents: next });
+      }
+    } catch (err) {
+      console.error("Failed to upload document:", err);
+      alert("Failed to upload document file.");
+    } finally {
+      setIsUploadingDoc(false);
+      e.target.value = "";
+    }
   };
 
   const addDocument = () => {
     if (!form) return;
-    setForm({
-      ...form,
-      documents: [
-        ...(form.documents || []),
-        { name: "New Document", url: "", type: "pdf" },
-      ],
-    });
+    const next = [
+      ...((form.documents as {
+        name: string;
+        url: string;
+        type?: "pdf" | "image";
+      }[]) || []),
+      { name: "New Document", url: "", type: "pdf" as const },
+    ];
+    setForm({ ...form, documents: next });
   };
 
   const removeDocument = (idx: number) => {
@@ -137,7 +188,13 @@ export default function UserProfile() {
     setForm({ ...form, documents: next });
   };
 
-  const canEdit = useMemo(() => currentUser?.role === "user" || currentUser?.role === "patient" || currentUser?.role === "doctor", [currentUser]);
+  const canEdit = useMemo(
+    () =>
+      (currentUser?.role as string) === "user" ||
+      currentUser?.role === "patient" ||
+      currentUser?.role === "doctor",
+    [currentUser]
+  );
 
   // Loading state
   if (isLoading) {
@@ -156,42 +213,11 @@ export default function UserProfile() {
     return (
       <div className="p-4 max-w-md mx-auto mt-8">
         <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-6">
-            <div className="text-red-600 mb-4">
-              <h3 className="font-semibold">Error Loading Profile</h3>
-              <p className="text-sm mt-2">{error}</p>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => window.location.reload()}
-              >
-                Try Again
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate("/dashboard")}
-              >
-                Back to Dashboard
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // No current user
-  if (!currentUser) {
-    return (
-      <div className="p-4 max-w-md mx-auto mt-8">
-        <Card>
-          <CardContent className="p-6 text-center">
-            <p className="mb-4">Please log in to view your profile.</p>
-            <Button onClick={() => navigate("/login")}>
-              Go to Login
+          <CardContent className="p-6 text-center text-red-700">
+            <p className="font-semibold mb-2">Error</p>
+            <p className="text-sm mb-4">{error}</p>
+            <Button onClick={() => navigate("/dashboard")}>
+              Back to Dashboard
             </Button>
           </CardContent>
         </Card>
@@ -310,6 +336,15 @@ export default function UserProfile() {
               disabled={!canEdit}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Vitals & History */}
+      <Card className="bg-white/80 backdrop-blur-sm border shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Vitals & History</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <Label className="text-xs">Height (cm)</Label>
             <Input
@@ -318,7 +353,7 @@ export default function UserProfile() {
               onChange={(e) =>
                 onChange(
                   "height",
-                  e.target.value ? Number(e.target.value) : null,
+                  e.target.value ? Number(e.target.value) : null
                 )
               }
               disabled={!canEdit}
@@ -332,145 +367,109 @@ export default function UserProfile() {
               onChange={(e) =>
                 onChange(
                   "weight",
-                  e.target.value ? Number(e.target.value) : null,
+                  e.target.value ? Number(e.target.value) : null
                 )
               }
               disabled={!canEdit}
             />
           </div>
-        </CardContent>
-      </Card>
-      
-      {/* Health Details */}
-      <Card className="bg-white/80 backdrop-blur-sm border shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Health Details</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Label className="text-xs">Lifestyle</Label>
-            <Textarea
-              rows={2}
-              value={form.lifestyle}
-              onChange={(e) => onChange("lifestyle", e.target.value)}
-              disabled={!canEdit}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <Label className="text-xs">Medical History</Label>
-            <Textarea
-              rows={2}
-              value={form.medicalHistory}
-              onChange={(e) => onChange("medicalHistory", e.target.value)}
+          <div className="sm:col-span-2 lg:col-span-1">
+            <Label className="text-xs">Conditions</Label>
+            <Input
+              placeholder="e.g. Hypertension, Diabetes"
+              value={form.conditions}
+              onChange={(e) => onChange("conditions", e.target.value)}
               disabled={!canEdit}
             />
           </div>
           <div>
             <Label className="text-xs">Allergies</Label>
             <Input
+              placeholder="e.g. Peanuts, Dust"
               value={form.allergies}
               onChange={(e) => onChange("allergies", e.target.value)}
               disabled={!canEdit}
             />
           </div>
-          <div>
-            <Label className="text-xs">Conditions</Label>
-            <Input
-              value={form.conditions}
-              onChange={(e) => onChange("conditions", e.target.value)}
-              disabled={!canEdit}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <Label className="text-xs">Medications</Label>
-            <Input
-              value={form.medications}
-              onChange={(e) => onChange("medications", e.target.value)}
-              disabled={!canEdit}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Sleep Pattern</Label>
-            <Input
-              value={form.sleepPattern}
-              onChange={(e) => onChange("sleepPattern", e.target.value)}
-              disabled={!canEdit}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Digestion</Label>
-            <Select
-              value={(form.digestion as any) || ""}
-              onValueChange={(v) => onChange("digestion", (v || null) as any)}
-              disabled={!canEdit}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Poor">Poor</SelectItem>
-                <SelectItem value="Normal">Normal</SelectItem>
-                <SelectItem value="Strong">Strong</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="sm:col-span-2">
-            <Label className="text-xs">Notes</Label>
+          <div className="sm:col-span-2 lg:col-span-2">
+            <Label className="text-xs">Medical History</Label>
             <Textarea
-              rows={3}
-              value={form.notes}
-              onChange={(e) => onChange("notes", e.target.value)}
+              placeholder="Past surgeries, chronic illness, family history..."
+              value={form.medicalHistory}
+              onChange={(e) => onChange("medicalHistory", e.target.value)}
+              rows={2}
               disabled={!canEdit}
             />
           </div>
         </CardContent>
       </Card>
-      
-      {/* Documents */}
+
+      {/* Medical Documents */}
       <Card className="bg-white/80 backdrop-blur-sm border shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Documents</CardTitle>
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>Medical Documents</span>
+            {isUploadingDoc && <span className="text-xs text-primary animate-pulse font-normal">Uploading file...</span>}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm text-muted-foreground">
-              Upload PDFs/images or add links.
+              Upload medical PDFs, lab reports, or scan images.
             </div>
             {canEdit && (
               <div className="flex items-center gap-2">
                 <Input
                   type="file"
                   accept="application/pdf,image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file || !form) return;
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const dataUrl = String(reader.result || "");
-                      const type = file.type.includes("pdf")
-                        ? ("pdf" as const)
-                        : ("image" as const);
-                      const next = [
-                        ...((form.documents as {
-                          name: string;
-                          url: string;
-                          type?: "pdf" | "image";
-                        }[]) || []),
-                        { name: file.name, url: dataUrl, type },
-                      ];
-                      setForm({ ...form, documents: next });
-                    };
-                    reader.readAsDataURL(file);
-                    e.currentTarget.value = "";
-                  }}
+                  onChange={handleFileUpload}
+                  disabled={isUploadingDoc}
                   className="max-w-[240px]"
                 />
-                <Button size="sm" onClick={addDocument}>
-                  Add Empty
+                <Button size="sm" onClick={addDocument} disabled={isUploadingDoc}>
+                  Add Link
                 </Button>
               </div>
             )}
           </div>
+
+          {/* Primary Medical History File if present */}
+          {(userProfile as any)?.medical_history_url && (
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-primary/5 border-primary/20">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-md bg-primary/10 text-primary">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Uploaded Medical History Report</p>
+                  <p className="text-xs text-muted-foreground">Primary Registration PDF</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 text-xs"
+                  onClick={() => {
+                    setSelectedDoc({
+                      name: "Uploaded Medical History Report",
+                      url: (userProfile as any).medical_history_url,
+                      type: "pdf"
+                    });
+                    setShowDocViewer(true);
+                  }}
+                >
+                  <Eye className="h-3.5 w-3.5" /> View PDF
+                </Button>
+                <Button size="sm" variant="ghost" asChild>
+                  <a href={(userProfile as any).medical_history_url} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             {(form.documents || []).map((doc, idx) => (
               <div
@@ -479,7 +478,7 @@ export default function UserProfile() {
               >
                 <div className="grid gap-2 sm:grid-cols-[1fr_1fr_120px] sm:flex-1 sm:items-center">
                   <Input
-                    placeholder="Name"
+                    placeholder="Document Name"
                     value={doc.name}
                     onChange={(e) => {
                       if (!canEdit) return;
@@ -490,7 +489,7 @@ export default function UserProfile() {
                     disabled={!canEdit}
                   />
                   <Input
-                    placeholder="https://... or data URL"
+                    placeholder="https://... URL"
                     value={doc.url}
                     onChange={(e) => {
                       if (!canEdit) return;
@@ -514,21 +513,36 @@ export default function UserProfile() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pdf">pdf</SelectItem>
-                      <SelectItem value="image">image</SelectItem>
+                      <SelectItem value="pdf">PDF</SelectItem>
+                      <SelectItem value="image">Image</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="flex items-center gap-2">
                   {doc.url && (
-                    <a
-                      className="text-sm text-primary underline"
-                      href={doc.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open
-                    </a>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1 text-xs"
+                        onClick={() => {
+                          setSelectedDoc({
+                            name: doc.name || `Document ${idx + 1}`,
+                            url: doc.url,
+                            type: doc.type || "pdf"
+                          });
+                          setShowDocViewer(true);
+                        }}
+                      >
+                        <Eye className="h-3.5 w-3.5" /> View PDF
+                      </Button>
+                      <Button size="sm" variant="ghost" asChild>
+                        <a href={doc.url} target="_blank" rel="noreferrer">
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </Button>
+                    </>
                   )}
                   {canEdit && (
                     <Button
@@ -542,18 +556,72 @@ export default function UserProfile() {
                 </div>
               </div>
             ))}
+
+            {!form.documents?.length && !(userProfile as any)?.medical_history_url && (
+              <div className="text-center py-6 text-sm text-muted-foreground border border-dashed rounded-lg">
+                No medical documents uploaded yet. Select a PDF or image file above to upload.
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
       
       {/* Sticky actions */}
       {canEdit && (
-        <div className="sticky bottom-0 inset-x-0 z-10 bg-white/80 backdrop-blur border-t p-3 flex justify-end">
-          <Button onClick={() => form && setUserProfile(form)}>
-            Save Changes
+        <div className="sticky bottom-4 z-10 flex justify-end gap-2 rounded-xl border bg-white/90 p-3 shadow-lg backdrop-blur">
+          <Button variant="outline" onClick={() => setForm(userProfile)}>
+            Discard Changes
+          </Button>
+          <Button onClick={handleSave} disabled={isLoading}>
+            {isLoading ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       )}
+
+      {/* Document Viewer Modal */}
+      <Dialog open={showDocViewer} onOpenChange={setShowDocViewer}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+          {selectedDoc && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedDoc.name}</DialogTitle>
+                <DialogDescription>
+                  Document Viewer ({selectedDoc.type?.toUpperCase() || "PDF"})
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 min-h-0 overflow-auto border rounded-lg mt-4 bg-muted/20 flex items-center justify-center p-2">
+                {selectedDoc.url && (selectedDoc.url.toLowerCase().includes(".pdf") || selectedDoc.type === "pdf") ? (
+                  <iframe
+                    src={selectedDoc.url}
+                    title={selectedDoc.name}
+                    className="w-full h-[60vh] rounded-md border"
+                  />
+                ) : selectedDoc.url ? (
+                  <img
+                    src={selectedDoc.url}
+                    alt={selectedDoc.name}
+                    className="max-h-[60vh] max-w-full object-contain rounded-md"
+                  />
+                ) : (
+                  <div className="p-6 text-center text-muted-foreground">
+                    No preview available for this document.
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setShowDocViewer(false)}>
+                  Close
+                </Button>
+                <Button asChild>
+                  <a href={selectedDoc.url} target="_blank" rel="noreferrer" download>
+                    Open in New Tab / Download
+                  </a>
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

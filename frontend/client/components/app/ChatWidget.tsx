@@ -390,9 +390,12 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
           const action = actionStr.slice(8, -1); // Remove [ACTION: and ]
           console.log("Executing instruction:", action);
 
-          if (action === "MARK_WATER") {
-            updateWater(250);
-          } else if (action === "MARK_MEAL") {
+          if (action.startsWith("MARK_WATER")) {
+            const parts = action.split(":");
+            const amount = parts[1] ? parseInt(parts[1], 10) : 250;
+            updateWater(isNaN(amount) ? 250 : amount);
+          }
+ else if (action === "MARK_MEAL") {
             markMealTaken();
           } else if (action.startsWith("NAVIGATE:")) {
             const path = action.split(":")[1];

@@ -687,6 +687,7 @@ export default function DoctorDietGenerator() {
 
                   const response = await axios.post("/api/diet/generate", {
                     patientId: pId,
+                    force_refresh: true,
                     age: match?.age || 30,
                     weight: match?.weight || 70,
                     height: match?.height || 170,
@@ -695,6 +696,7 @@ export default function DoctorDietGenerator() {
                     goals: "Holistic wellness and Ayurvedic balance",
                     gender: match?.gender || "Male"
                   }, { withCredentials: true });
+
 
                   console.log("AI Backend Response:", response.data);
 

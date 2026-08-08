@@ -151,7 +151,7 @@ function SelectField({
 
 export default function AddPatient() {
   const navigate = useNavigate();
-  const { currentUser, addNotification, setRequests, requests, doctors } = useAppState() as any;
+  const { currentUser, addNotification, doctors } = useAppState() as any;
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [medicalHistoryFile, setMedicalHistoryFile] = useState<File | null>(null); // New state for file name
@@ -211,80 +211,43 @@ export default function AddPatient() {
       return;
     }
 
-    // Create new patient request
-    const newPatient: any = {
-      id: `req_${Date.now()}`,
-      userId: `u_${Date.now()}`,
-      doctorId: doctorId,
-      status: "accepted",
-      createdAt: new Date().toISOString(),
-      acceptedDate: new Date().toISOString(),
-      patientName: values.name,
-      patientDosha: values.ayurvedic_category.charAt(0).toUpperCase() + values.ayurvedic_category.slice(1),
-      age: values.dob ? new Date().getFullYear() - new Date(values.dob).getFullYear() : null,
-      gender: values.gender === "prefer not to say" ? "Other" : values.gender.charAt(0).toUpperCase() + values.gender.slice(1),
-      symptoms: values.diseases || "No specific symptoms reported",
-      weight: values.weight ? parseInt(values.weight) : null,
-      height: values.height ? parseInt(values.height) : null,
-      emergencyContact: values.contact,
-      lifestyle: "Information to be collected during consultation",
-      documents: medicalHistoryFile ? [{ name: medicalHistoryFile.name, url: "#", type: "pdf" }] : [],
-      patientProfile: {
-        id: `P-${Date.now()}`,
-        name: values.name,
-        dosha: values.ayurvedic_category.charAt(0).toUpperCase() + values.ayurvedic_category.slice(1),
-        age: values.dob ? new Date().getFullYear() - new Date(values.dob).getFullYear() : null,
-        gender: values.gender === "prefer not to say" ? "Other" : values.gender.charAt(0).toUpperCase() + values.gender.slice(1),
-        phone: values.contact,
-        address: `${values.address.city}, ${values.address.state}, ${values.address.country}`,
-        height: values.height ? parseInt(values.height) : null,
-        weight: values.weight ? parseInt(values.weight) : null,
-        lifestyle: "",
-        medicalHistory: "",
-        allergies: values.allergies || "",
-        conditions: values.diseases || "",
-        medications: "",
-        habits: "",
-        sleepPattern: "",
-        digestion: null,
-        emergencyContact: values.contact,
-        notes: "",
-        documents: medicalHistoryFile ? [{ name: medicalHistoryFile.name, url: "#", type: "pdf" }] : [],
-      },
-      plan: [
-        {
-          time: "08:00",
-          name: "Breakfast",
-          calories: 350,
-          waterMl: 250,
-        },
-        {
-          time: "13:00",
-          name: "Lunch",
-          calories: 500,
-          waterMl: 300,
-        },
-        {
-          time: "19:00",
-          name: "Dinner",
-          calories: 400,
-          waterMl: 250,
-        },
-      ],
-    };
+    const formData = new FormData();
+    formData.append("name", values.name);
+    formData.append("email", values.email);
+    formData.append("gender", values.gender);
+    formData.append("dob", values.dob);
+    formData.append("contact", values.contact);
+    formData.append("address", JSON.stringify(values.address));
+    if (values.height) formData.append("height", values.height);
+    if (values.weight) formData.append("weight", values.weight);
+    formData.append("ayurvedic_category", values.ayurvedic_category);
+    if (values.allergies) formData.append("allergies", values.allergies);
+    if (values.diseases) formData.append("diseases", values.diseases);
+    if (medicalHistoryFile) formData.append("medical_history", medicalHistoryFile);
 
-    // Add the new patient to the requests array
-    setRequests((prev: any[]) => [...prev, newPatient]);
-
-    // Show success notification
-    addNotification({
-      type: "success",
-      title: "Patient added successfully!",
-      message: `${values.name} has been assigned to you.`,
-    });
-
-    // Navigate back to patients page
-    navigate("/doctor/patients");
+    try {
+      const res = await fetch("/api/doctor/patients", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.detail || "Failed to add patient");
+        setIsLoading(false);
+        return;
+      }
+      
+      addNotification({
+        type: "success",
+        title: "Patient added successfully!",
+        message: `${values.name} has been assigned to you.`,
+      });
+      navigate("/doctor/patients");
+    } catch (err) {
+      setError("Network error occurred while adding patient.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

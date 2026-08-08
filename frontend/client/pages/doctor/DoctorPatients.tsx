@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function DoctorPatients() {
-  const { currentUser, doctors, requests } = useAppState();
+  const { currentUser, doctors } = useAppState();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
 
@@ -71,21 +71,34 @@ export default function DoctorPatients() {
     writeLV(m);
   };
 
-  // Get all patients for this doctor
-  const myPatients = useMemo(
-    () => {
-      console.log("DoctorPatients - Filtering patients:", {
-        doctorProfileId,
-        currentUserId: currentUser?.id,
-        allRequests: requests.map(r => ({ id: r.id, doctorId: r.doctorId, status: r.status, patientName: r.patientName }))
-      });
+  function getCreatedAt(patient: any) {
+    if (patient.createdAt) return new Date(patient.createdAt);
+    if (patient.id && patient.id.length === 24) {
+      return new Date(parseInt(patient.id.substring(0, 8), 16) * 1000);
+    }
+    return new Date();
+  }
 
-      return requests.filter(
-        (r) => r.doctorId === doctorProfileId && r.status === "accepted",
-      );
-    },
-    [requests, doctorProfileId, currentUser?.id],
-  );
+  const [myPatients, setMyPatients] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const res = await fetch("/api/doctor/patients");
+        const data = await res.json();
+        if (data.success) {
+          setMyPatients(data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch patients:", err);
+      }
+    };
+    if (currentUser?.role === 'doctor') {
+      fetchPatients();
+    }
+  }, [currentUser]);
+
+
 
   // Calculate statistics based on available data
   const stats = useMemo(() => {
@@ -95,7 +108,7 @@ export default function DoctorPatients() {
 
     // Count patients added in the last month
     const recentPatients = myPatients.filter((p) => {
-      const patientDate = new Date(p.createdAt);
+      const patientDate = getCreatedAt(p);
       return patientDate > monthAgo;
     });
 
@@ -120,7 +133,7 @@ export default function DoctorPatients() {
     const q = query.trim().toLowerCase();
     const lv = readLV();
     const arr = myPatients.filter((r) => {
-      const name = (r.patientName || `Patient ${r.userId}`).toLowerCase();
+      const name = (r.name || `Patient ${r.id}`).toLowerCase();
       return q ? name.includes(q) : true;
     });
     return arr.sort((a, b) => {
@@ -129,8 +142,8 @@ export default function DoctorPatients() {
       if (la && lb) return lb - la;
       if (la && !lb) return -1;
       if (!la && lb) return 1;
-      const na = (a.patientName || `Patient ${a.userId}`).toLowerCase();
-      const nb = (b.patientName || `Patient ${b.userId}`).toLowerCase();
+      const na = (a.name || `Patient ${a.id}`).toLowerCase();
+      const nb = (b.name || `Patient ${b.id}`).toLowerCase();
       return na.localeCompare(nb);
     });
   }, [query, myPatients]);
@@ -287,20 +300,20 @@ export default function DoctorPatients() {
                           >
                             <Avatar className="h-10 w-10 group-hover:ring-2 group-hover:ring-blue-500 transition-all">
                               <AvatarFallback className="bg-gray-100 text-gray-700 font-medium">
-                                {patient.patientName
+                                {patient.name
                                   ?.split(" ")
-                                  .map((n) => n[0])
+                                  .map((n: string) => n[0])
                                   .join("")
                                   .toUpperCase() || "P"}
                               </AvatarFallback>
                             </Avatar>
                             <div>
                               <div className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
-                                {patient.patientName || `Patient ${patient.userId}`}
+                                {patient.name || `Patient ${patient.id}`}
                               </div>
                               <div className="text-sm text-gray-500 flex items-center">
                                 <Heart className="h-3 w-3 mr-1 text-gray-400" />
-                                {patient.patientDosha || "No constitution data"}
+                                {patient.ayurvedic_category || "No constitution data"}
                               </div>
                             </div>
                           </div>
@@ -308,7 +321,7 @@ export default function DoctorPatients() {
                         <TableCell className="px-4 py-4">
                           <div className="flex items-center text-sm text-gray-600">
                             <Calendar className="mr-2 h-4 w-4 text-gray-400" />
-                            {new Date(patient.createdAt).toLocaleDateString(
+                            {getCreatedAt(patient).toLocaleDateString(
                               "en-US",
                               {
                                 year: "numeric",
@@ -378,24 +391,24 @@ export default function DoctorPatients() {
                       >
                         <Avatar className="h-12 w-12 group-hover:ring-2 group-hover:ring-blue-500 transition-all">
                           <AvatarFallback className="bg-gray-100 text-gray-700 font-medium">
-                            {patient.patientName
+                            {patient.name
                               ?.split(" ")
-                              .map((n) => n[0])
+                              .map((n: string) => n[0])
                               .join("")
                               .toUpperCase() || "P"}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                            {patient.patientName || `Patient ${patient.userId}`}
+                            {patient.name || `Patient ${patient.id}`}
                           </div>
                           <div className="text-sm text-gray-500 flex items-center mt-1">
                             <Heart className="h-3 w-3 mr-1 text-gray-400" />
-                            {patient.patientDosha || "No constitution data"}
+                            {patient.ayurvedic_category || "No constitution data"}
                           </div>
                           <div className="text-sm text-gray-500 flex items-center mt-1">
                             <Calendar className="h-3 w-3 mr-1 text-gray-400" />
-                            {new Date(patient.createdAt).toLocaleDateString("en-US", {
+                            {getCreatedAt(patient).toLocaleDateString("en-US", {
                               year: "numeric",
                               month: "short",
                               day: "numeric",

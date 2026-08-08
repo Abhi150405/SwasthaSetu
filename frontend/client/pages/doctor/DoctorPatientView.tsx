@@ -1,6 +1,5 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useAppState } from "@/context/app-state";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -26,7 +25,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip as ShadcnTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
-  User, HeartPulse, Stethoscope, 
+  User, HeartPulse, Stethoscope, Heart,
   ArrowLeft, Activity, Smartphone, 
   Home, AlertCircle, Droplets, Flame, Calendar,
   Plus, Minus, Clock, Utensils, Droplet, Sun, Moon, Coffee, Scale, TrendingUp, TrendingDown
@@ -36,39 +35,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { format } from 'date-fns';
-
-// Type Definitions
-interface Meal {
-  time: string;
-  name: string;
-  calories: number;
-  waterMl: number;
-  type?: string;
-  protein?: number;
-  carbs?: number;
-  fat?: number;
-  dosha?: string;
-  rasa?: string;
-  properties?: string[];
-}
-
-interface DayPlan {
-  date: string;
-  meals: Meal[];
-}
-
-interface WeeklyPlan {
-  days: DayPlan[];
-}
-
 interface MedicalDocument {
   id: string;
   name: string;
   type: 'report' | 'prescription' | 'scan' | 'other' | 'pdf' | 'image';
   date: string;
   fileUrl: string;
-  url?: string; // For backward compatibility
+  url?: string;
   description?: string;
 }
 
@@ -93,129 +66,182 @@ interface PatientProfile {
   documents?: MedicalDocument[];
 }
 
-interface Request {
-  id: string;
-  userId: string;
-  patientName?: string;
-  patientDosha?: string;
-  status: string;
-  patientProfile?: PatientProfile;
-}
-
 export default function DoctorPatientView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { requests } = useAppState();
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showPrescriptionDialog, setShowPrescriptionDialog] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<MedicalDocument | null>(null);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   
-  // Sample documents data - in a real app, this would come from an API
-  const sampleDocuments: MedicalDocument[] = [
-    {
-      id: 'doc1',
-      name: 'Blood Test Report - CBC & Lipid Profile',
-      type: 'report',
-      date: '2023-10-15',
-      fileUrl: 'https://example.com/reports/cbc_lipid_oct2023.pdf',
-      description: 'Complete Blood Count and Lipid Profile - Fasting'
-    },
-    {
-      id: 'doc2',
-      name: 'Chest X-Ray - PA View',
-      type: 'scan',
-      date: '2023-09-28',
-      fileUrl: 'https://example.com/scans/chest_xray_sep2023.png',
-      description: 'Posteroanterior chest radiograph - No active disease'
-    },
-    {
-      id: 'doc3',
-      name: 'Prescription - Dr. Sharma',
-      type: 'prescription',
-      date: '2023-11-02',
-      fileUrl: 'https://example.com/prescriptions/prescription_nov2023.pdf',
-      description: 'Follow-up medication and instructions for next visit'
-    },
-    {
-      id: 'doc4',
-      name: 'ECG Report',
-      type: 'report',
-      date: '2023-08-15',
-      fileUrl: 'https://example.com/reports/ecg_aug2023.pdf',
-      description: '12-lead Electrocardiogram - Normal sinus rhythm'
-    },
-    {
-      id: 'doc5',
-      name: 'MRI Brain - With Contrast',
-      type: 'scan',
-      date: '2023-07-20',
-      fileUrl: 'https://example.com/scans/mri_brain_jul2023.dcm',
-      description: 'MRI Brain with and without contrast - Unremarkable findings'
-    },
-    {
-      id: 'doc6',
-      name: 'Discharge Summary',
-      type: 'other',
-      date: '2023-06-10',
-      fileUrl: 'https://example.com/other/discharge_summary_jun2023.pdf',
-      description: 'Hospital discharge summary - General Medicine Department'
-    }
-  ];
+  const [profile, setProfile] = useState<PatientProfile | null>(null);
+  const [dietPlan, setDietPlan] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Generate sample data for the last 7 days
+  const [targetWater, setTargetWater] = useState<number>(2500);
+  const [targetCalories, setTargetCalories] = useState<number>(2000);
+  const [isEditingTargets, setIsEditingTargets] = useState(false);
+  const [isSavingTargets, setIsSavingTargets] = useState(false);
+
+  useEffect(() => {
+    if (history && history.length > 0) {
+      if (history[0].target_water_ml) setTargetWater(history[0].target_water_ml);
+      if (history[0].target_calories) setTargetCalories(history[0].target_calories);
+    }
+  }, [history]);
+
+  const handleSaveTargets = async () => {
+    setIsSavingTargets(true);
+    try {
+      const res = await fetch("/api/progress/targets", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: id,
+          target_water_ml: targetWater,
+          target_calories: targetCalories,
+        }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsEditingTargets(false);
+        const hRes = await fetch(`/api/progress/history?limit=7&patient_id=${id}`, { credentials: "include" });
+        const hData = await hRes.json();
+        if (hData.success) setHistory(hData.data);
+      }
+    } catch (e) {
+      console.error("Failed to save targets:", e);
+    } finally {
+      setIsSavingTargets(false);
+    }
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [patientRes, dietRes, historyRes] = await Promise.all([
+          fetch(`/api/doctor/patients/${id}`).then(r => r.json()),
+          fetch(`/api/diet/patient/${id}`).then(r => r.json()),
+          fetch(`/api/progress/history?limit=7&patient_id=${id}`).then(r => r.json())
+        ]);
+        
+        if (patientRes.success) {
+          const p = patientRes.data;
+          
+          let age = undefined;
+          if (p.dob) {
+             const dob = new Date(p.dob);
+             if (!isNaN(dob.getTime())) {
+               const today = new Date();
+               age = today.getFullYear() - dob.getFullYear();
+               const m = today.getMonth() - dob.getMonth();
+               if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+             }
+          }
+          
+          let docs: any[] = [];
+          if (p.medical_history_url) {
+            docs.push({
+              id: 'doc_history',
+              name: 'Medical History Report',
+              type: 'pdf',
+              date: p.createdAt || new Date().toISOString(),
+              fileUrl: p.medical_history_url
+            });
+          }
+          if (p.documents && Array.isArray(p.documents)) {
+            p.documents.forEach((d: any, idx: number) => {
+              const url = d.url || d.fileUrl;
+              if (url) {
+                docs.push({
+                  id: `doc_${idx + 1}`,
+                  name: d.name || `Medical Document ${idx + 1}`,
+                  type: d.type || (url.toLowerCase().includes('.pdf') ? 'pdf' : 'image'),
+                  date: d.date || d.uploadedAt || new Date().toISOString(),
+                  fileUrl: url
+                });
+              }
+            });
+          }
+
+
+          setProfile({
+            id: p.id,
+            name: p.name,
+            dosha: p.ayurvedic_category,
+            gender: p.gender,
+            age: age,
+            phone: p.contact,
+            address: typeof p.address === 'object' && p.address !== null 
+                     ? `${p.address.city || ''}, ${p.address.state || ''}`
+                     : p.address,
+            emergencyContact: p.contact,
+            medicalHistory: "", 
+            allergies: p.allergies,
+            medications: "",
+            lifestyle: "",
+            sleepPattern: "",
+            habits: "",
+            height: p.height,
+            weight: p.weight,
+            documents: docs
+          } as any);
+        }
+        
+        if (dietRes.success && dietRes.data.length > 0) {
+          setDietPlan(dietRes.data[0]);
+        }
+
+        if (historyRes.success) {
+          setHistory(historyRes.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch patient details", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [id]);
+
   const generateChartData = useCallback(() => {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    return days.map((day, index) => {
-      // Generate random but realistic data
-      const baseHydration = Math.floor(Math.random() * 500) + 1500; // 1500-2000ml
-      const baseCalories = Math.floor(Math.random() * 500) + 1800; // 1800-2300 kcal
-      
+    return days.map((day) => ({
+      name: day,
+      hydration: 0,
+      calories: 0,
+      targetHydration: 2500,
+      targetCalories: 2000
+    }));
+  }, []);
+
+  const chartData = useMemo(() => {
+    if (!history || history.length === 0) return generateChartData();
+    
+    return history.map(day => {
+      const dateStr = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
+      let cals = 0;
+      if (dietPlan && dietPlan.plan && dietPlan.plan.length > 0) {
+        const dayPlan = dietPlan.plan[0];
+        day.meal_log.forEach((ml: any) => {
+          if (ml.status === 'completed') {
+             const m = dayPlan.meals.find((xm: any) => xm.type.toLowerCase() === ml.meal_type.toLowerCase());
+             if (m) cals += m.total_nutrition?.calories || 0;
+          }
+        });
+      }
       return {
-        name: day,
-        hydration: baseHydration + (Math.random() > 0.5 ? 200 : -100),
-        calories: baseCalories + (Math.random() > 0.5 ? 300 : -200),
+        name: dateStr,
+        hydration: day.water_intake_ml || 0,
+        calories: cals,
         targetHydration: 2500,
         targetCalories: 2000
       };
-    });
-  }, []);
-  
-  const chartData = useMemo(() => generateChartData(), [generateChartData]);
-
-  // Find the current request
-  const req = useMemo(() => requests.find((r) => r.id === id), [requests, id]);
-  
-  // Normalize patient profile
-  const profile = useMemo<PatientProfile | null>(() => {
-    if (!req?.patientProfile) return null;
-    
-    // Create a new patient profile with default values
-    const p: PatientProfile = {
-      ...req.patientProfile,
-      // Always use our sample documents for now
-      documents: [...sampleDocuments]
-    };
-    
-    // Calculate age from DOB if available
-    if (p.dob) {
-      try {
-        const dob = new Date(p.dob);
-        if (!isNaN(dob.getTime())) {
-          const today = new Date();
-          let age = today.getFullYear() - dob.getFullYear();
-          const m = today.getMonth() - dob.getMonth();
-          if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-          p.age = age;
-        }
-      } catch (e) {
-        console.error('Error calculating age:', e);
-      }
-    }
-    
-    return p;
-  }, [req]);
+    }).reverse();
+  }, [history, dietPlan, generateChartData]);
 
 
   // Calculate weekly averages
@@ -229,7 +255,16 @@ export default function DoctorPatientView() {
     return Math.round(total / chartData.length);
   }, [chartData]);
 
-  if (!req || !profile) {
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6 flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+        <p className="mt-4 text-muted-foreground">Loading patient profile...</p>
+      </div>
+    );
+  }
+
+  if (!profile) {
     return (
       <div className="container mx-auto p-6">
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -378,64 +413,110 @@ export default function DoctorPatientView() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Medical Information */}
-            <Card>
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                    <Stethoscope className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <CardTitle className="text-lg font-semibold">Medical Information</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Medical History</h4>
-                  <p className="text-sm">
-                    {profile.medicalHistory || 'No medical history provided'}
-                  </p>
-                </div>
-                <Separator />
-                <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Allergies</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {profile.allergies ? (
-                      profile.allergies.split(',').map((allergy, i) => (
-                        <Badge key={i} variant="outline" className="text-amber-700 bg-amber-50 border-amber-100">
-                          {allergy.trim()}
-                        </Badge>
-                      ))
-                    ) : (
-                      <span className="text-sm text-muted-foreground">No known allergies</span>
-                    )}
-                  </div>
-                </div>
-                <Separator />
-                <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Current Medications</h4>
-                  <p className="text-sm">
-                    {profile.medications || 'No current medications'}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Weekly Tracking */}
-            <Card>
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
+              {/* Medical Information */}
+              <Card>
+                <CardHeader className="pb-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
-                      <Calendar className="h-5 w-5 text-emerald-600" />
+                    <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30">
+                      <Heart className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <CardTitle className="text-lg font-semibold">Medical Information</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Medical History</h4>
+                      <p className="text-sm font-medium">
+                        {profile.medicalHistory || 'No prior medical history listed'}
+                      </p>
                     </div>
                     <div>
-                      <CardTitle className="text-lg font-semibold">Weekly Tracking</CardTitle>
-                      <p className="text-sm text-muted-foreground">Last 7 days of activity</p>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">Allergies</h4>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {profile.allergies ? (
+                          (Array.isArray(profile.allergies) ? profile.allergies : [profile.allergies]).map((allergy, i) => (
+                            <Badge key={i} variant="outline" className="text-rose-600 border-rose-200 bg-rose-50">
+                              {allergy}
+                            </Badge>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No known allergies</p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardHeader>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-2">Current Medications</h4>
+                    <p className="text-sm">
+                      {profile.medications || 'No current medications'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Weekly Tracking */}
+              <Card>
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
+                        <Calendar className="h-5 w-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-semibold">Weekly Tracking & Goals</CardTitle>
+                        <p className="text-sm text-muted-foreground">Target Water: {targetWater}ml • Target Calories: {targetCalories}kcal</p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditingTargets(!isEditingTargets)}
+                      className="border-emerald-200 hover:bg-emerald-50 text-emerald-700 font-medium"
+                    >
+                      {isEditingTargets ? "Cancel" : "Edit Targets"}
+                    </Button>
+                  </div>
+
+                  {isEditingTargets && (
+                    <div className="mt-4 p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-4">
+                      <h4 className="text-sm font-bold text-slate-800">Set Health Targets for Patient</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-700">Water Goal (ml / day)</label>
+                          <input
+                            type="number"
+                            value={targetWater}
+                            onChange={(e) => setTargetWater(Number(e.target.value))}
+                            className="w-full h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white"
+                            placeholder="e.g. 2500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-700">Calorie Goal (kcal / day)</label>
+                          <input
+                            type="number"
+                            value={targetCalories}
+                            onChange={(e) => setTargetCalories(Number(e.target.value))}
+                            className="w-full h-10 rounded-lg border border-slate-300 px-3 text-sm bg-white"
+                            placeholder="e.g. 2000"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end space-x-2 pt-1">
+                        <Button
+                          size="sm"
+                          onClick={handleSaveTargets}
+                          disabled={isSavingTargets}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4"
+                        >
+                          {isSavingTargets ? "Saving..." : "Save Patient Targets"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardHeader>
               <CardContent className="pt-0">
                 <div className="space-y-8">
                   {/* Hydration Chart */}
@@ -571,6 +652,68 @@ export default function DoctorPatientView() {
 
           {/* Right Column */}
           <div className="space-y-6 lg:col-span-1">
+            {/* Live Patient Activity Log & Exact Timestamps */}
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white overflow-hidden rounded-2xl">
+              <CardHeader className="pb-3 border-b border-slate-700/60">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                    <CardTitle className="text-base font-bold text-white">Live Activity & Timestamps</CardTitle>
+                  </div>
+                  <span className="text-xs text-emerald-400 font-mono">
+                    {history[0]?.updated_at ? new Date(history[0].updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Today"}
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4 text-xs sm:text-sm">
+                {/* Water Timestamp */}
+                <div className="flex items-center justify-between bg-slate-800/80 p-3 rounded-xl border border-slate-700">
+                  <div className="flex items-center space-x-2.5">
+                    <Droplets className="h-4 w-4 text-blue-400" />
+                    <div>
+                      <p className="font-semibold text-slate-200">Water Intake</p>
+                      <p className="text-[11px] text-slate-400">
+                        {history[0]?.water_updated_at
+                          ? `Updated at ${new Date(history[0].water_updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                          : "Not updated today"}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="font-bold text-blue-400 text-sm">{history[0]?.water_intake_ml || 0} ml</span>
+                </div>
+
+                {/* Meal Timestamps */}
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Meal Timestamps</p>
+                  {['breakfast', 'lunch', 'dinner'].map((mType) => {
+                    const mealItem = history[0]?.meal_log?.find((m: any) => m.meal_type === mType);
+                    const isCompleted = mealItem?.status === 'completed';
+                    const timeStr = mealItem?.acknowledged_at
+                      ? new Date(mealItem.acknowledged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : null;
+                    return (
+                      <div key={mType} className="flex items-center justify-between bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/60">
+                        <div className="flex items-center space-x-2">
+                          <span className={`h-2 w-2 rounded-full ${isCompleted ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                          <span className="capitalize font-medium text-slate-200">{mType}</span>
+                        </div>
+                        {isCompleted ? (
+                          <div className="text-right">
+                            <span className="inline-block px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-md text-[10px] font-semibold">
+                              Taken
+                            </span>
+                            {timeStr && <span className="block text-[10px] text-slate-400 mt-0.5">at {timeStr}</span>}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-500">Pending</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Lifestyle Information */}
             <Card>
               <CardHeader className="pb-4">
@@ -768,27 +911,26 @@ export default function DoctorPatientView() {
                   <span className="capitalize">{selectedDocument.type}</span>
                 </DialogDescription>
               </DialogHeader>
-              <div className="flex-1 min-h-0 overflow-auto border rounded-lg mt-4">
-                {selectedDocument.type === 'scan' || selectedDocument.type === 'other' ? (
+              <div className="flex-1 min-h-0 overflow-auto border rounded-lg mt-4 bg-muted/20 flex items-center justify-center p-2">
+                {selectedDocument.fileUrl && (selectedDocument.fileUrl.toLowerCase().includes('.pdf') || selectedDocument.type === 'pdf') ? (
+                  <iframe 
+                    src={selectedDocument.fileUrl} 
+                    title={selectedDocument.name}
+                    className="w-full h-[60vh] rounded-md border"
+                  />
+                ) : selectedDocument.fileUrl ? (
                   <img 
                     src={selectedDocument.fileUrl} 
                     alt={selectedDocument.name}
-                    className="w-full h-full object-contain"
+                    className="max-h-[60vh] max-w-full object-contain rounded-md"
                   />
                 ) : (
-                  <div className="p-6">
-                    <h3 className="text-lg font-medium mb-4">{selectedDocument.name}</h3>
-                    {selectedDocument.description && (
-                      <p className="text-muted-foreground mb-4">{selectedDocument.description}</p>
-                    )}
-                    <div className="mt-6 p-4 bg-muted/50 rounded-lg">
-                      <p className="text-sm text-muted-foreground">
-                        This is a preview of the document. To view the full document, please download it.
-                      </p>
-                    </div>
+                  <div className="p-6 text-center text-muted-foreground">
+                    No preview available for this document.
                   </div>
                 )}
               </div>
+
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={() => setShowDocumentViewer(false)}>
                   Close

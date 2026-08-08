@@ -99,6 +99,7 @@ export default function Tracking() {
   
   // Provide default values if appState is not available yet
   const { 
+    dietPlan,
     progress = { 
       waterMl: 0, 
       waterGoalMl: 2000, 
@@ -108,6 +109,7 @@ export default function Tracking() {
     updateWater = () => {},
     markMealTaken = () => {}
   } = appState || {};
+
 
   useEffect(() => {
     if (!reminders) return;
@@ -255,17 +257,59 @@ export default function Tracking() {
     }
   };
 
-  // Define the week data with proper typing
+  const fullPlanDays = useMemo(() => {
+    if (dietPlan && (dietPlan as any).fullPlan && Array.isArray((dietPlan as any).fullPlan)) {
+      return (dietPlan as any).fullPlan;
+    }
+    return null;
+  }, [dietPlan]);
+
+  // Define the week data synchronized with live diet plan
   const week = useMemo(() => {
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const today = new Date();
-    const currentDay = today.getDay(); // 0 (Sunday) to 6 (Saturday)
+    
+    if (fullPlanDays && fullPlanDays.length > 0) {
+      return fullPlanDays.map((dayItem: any, idx: number) => {
+        let itemDate = new Date();
+        if (dayItem.date && typeof dayItem.date === "string" && dayItem.date.includes("-")) {
+          const parts = dayItem.date.split("T")[0].split("-");
+          if (parts.length === 3) {
+            itemDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          }
+        } else {
+          itemDate = new Date(today.getTime() + idx * 86400000);
+        }
+
+        const dayShort = itemDate.toLocaleDateString("en-US", { weekday: "short" });
+        const monthShort = itemDate.toLocaleDateString("en-US", { month: "short" });
+        const dayNum = itemDate.getDate();
+        const cals = dayItem.daily_nutrition_summary?.calories || 1800;
+
+        return {
+          day: dayShort,
+          date: dayNum,
+          month: itemDate.getMonth() + 1,
+          monthName: monthShort,
+          formattedDate: dayItem.formatted_date || `${dayShort}, ${monthShort} ${dayNum}`,
+          calories: cals,
+          water: progress.waterMl,
+          goal: progress.waterGoalMl,
+          isToday: idx === 0,
+          fullDate: itemDate,
+          rawDay: dayItem
+        };
+      });
+    }
+
+
+    // Default fallback if no diet plan yet
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const currentDay = today.getDay();
     const todayShort = today.toLocaleDateString('en-US', { weekday: 'short' });
     
     return days.map((day, idx) => {
       const date = new Date(today);
-      // Start the week from Sunday
-      const dayOffset = currentDay; // 0 = Sunday, 1 = Monday, etc.
+      const dayOffset = currentDay;
       date.setDate(today.getDate() - dayOffset + idx);
       
       return {
@@ -273,14 +317,43 @@ export default function Tracking() {
         date: date.getDate(),
         month: date.getMonth() + 1,
         monthName: date.toLocaleString('default', { month: 'short' }),
-        calories: 1800 + Math.round(Math.random() * 1000),
-        water: 1000 + Math.round(Math.random() * 2000),
-        goal: 2200,
+        formattedDate: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        calories: 1800,
+        water: progress.waterMl,
+        goal: progress.waterGoalMl,
         isToday: day === todayShort,
-        fullDate: date
+        fullDate: date,
+        rawDay: null
       };
     });
-  }, []);
+  }, [fullPlanDays, progress]);
+
+  const activeMealsMap = useMemo(() => {
+    const selectedWeekDay = week[selectedDayIndex];
+    if (selectedWeekDay && selectedWeekDay.rawDay && selectedWeekDay.rawDay.meals) {
+      const rawMeals = selectedWeekDay.rawDay.meals;
+      const bMeal = rawMeals.find((m: any) => m.type === "Breakfast");
+      const lMeal = rawMeals.find((m: any) => m.type === "Lunch");
+      const dMeal = rawMeals.find((m: any) => m.type === "Dinner");
+
+      return {
+        breakfast: bMeal ? bMeal.items.map((i: any) => i.name).join(", ") : "Ayurvedic Herbal Tea & Oats",
+        lunch: lMeal ? lMeal.items.map((i: any) => i.name).join(", ") : "Spiced Kitchari & Vegetables",
+        dinner: dMeal ? dMeal.items.map((i: any) => i.name).join(", ") : "Warm Vegetable Soup & Chapati"
+      };
+    }
+
+    if (weeklyMealPlan[selectedDayIndex]) {
+      return weeklyMealPlan[selectedDayIndex].meals;
+    }
+
+    return {
+      breakfast: "Balanced Ayurvedic Breakfast",
+      lunch: "Nutritious Ayurvedic Lunch",
+      dinner: "Light Restorative Dinner"
+    };
+  }, [selectedDayIndex, week]);
+
 
   // Debug: Log the chart data
   console.log('Chart data:', week);
@@ -301,9 +374,14 @@ export default function Tracking() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-300">
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-semibold text-gray-700 flex items-center gap-2">
-                <div className="w-2 h-2 bg-sky-500 rounded-full"></div>
-                Water Intake
+              <CardTitle className="text-lg font-semibold text-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-sky-500 rounded-full"></div>
+                  Water Intake
+                </div>
+                <span className="text-xs bg-sky-50 text-sky-700 font-medium px-2 py-0.5 rounded-full border border-sky-100">
+                  👨‍⚕️ Goal set by {progress.doctorName || 'Dr. Sharma'}
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -319,15 +397,20 @@ export default function Tracking() {
 
           <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-300">
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-semibold text-gray-700 flex items-center gap-2">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                Meals
+              <CardTitle className="text-lg font-semibold text-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                  Meals
+                </div>
+                <span className="text-xs bg-emerald-50 text-emerald-700 font-medium px-2 py-0.5 rounded-full border border-emerald-100">
+                  👨‍⚕️ {progress.doctorName || 'Dr. Sharma'}
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-emerald-600 mb-2">{progress.mealsTaken}<span className="text-lg text-gray-500">/{progress.mealsPlanned}</span></div>
               <div className="text-sm text-emerald-600 mb-3">↑ {Math.round(progress.mealsTaken / progress.mealsPlanned * 100)}% completed</div>
-              <Button size="sm" onClick={markMealTaken} className="bg-emerald-500 hover:bg-emerald-600">Mark Meal</Button>
+              <Button size="sm" onClick={() => markMealTaken()} className="bg-emerald-500 hover:bg-emerald-600">Mark Meal</Button>
             </CardContent>
           </Card>
 
@@ -555,9 +638,10 @@ export default function Tracking() {
             </h3>
             
             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(weeklyMealPlan[selectedDayIndex].meals)
+              {Object.entries(activeMealsMap)
                 .filter(([mealType]) => mealType !== 'snack')
                 .map(([mealType, description]) => (
+
                 <div 
                   key={mealType}
                   className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200"

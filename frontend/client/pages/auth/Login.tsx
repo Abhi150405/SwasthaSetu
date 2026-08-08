@@ -4,19 +4,19 @@ import { Loader2, XCircle } from "lucide-react";
 import axios from 'axios';
 
 // --- START: Clean Google-like UI Components ---
-const Card = ({ children, className }) => (
+const Card = ({ children, className = "" }) => (
   <div className={`rounded-3xl bg-white shadow-xl border border-gray-100 ${className}`}>
     {children}
   </div>
 );
 
-const CardContent = ({ children, className }) => (
+const CardContent = ({ children, className = "" }) => (
   <div className={`p-12 ${className}`}>
     {children}
   </div>
 );
 
-const Button = ({ children, className, onClick, disabled }) => (
+const Button = ({ children, className = "", onClick, disabled = false }) => (
   <motion.button
     whileHover={{ scale: disabled ? 1 : 1.02 }}
     whileTap={{ scale: disabled ? 1 : 0.98 }}
@@ -28,7 +28,7 @@ const Button = ({ children, className, onClick, disabled }) => (
   </motion.button>
 );
 
-const Input = ({ className, ...props }) => (
+const Input = ({ className = "", ...props }) => (
   <motion.input
     whileFocus={{ scale: 1.02 }}
     className={`flex h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-base placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent focus:bg-white transition-all duration-300 ${className}`}
@@ -36,36 +36,15 @@ const Input = ({ className, ...props }) => (
   />
 );
 
-const Label = ({ children, className }) => (
+const Label = ({ children, className = "" }) => (
   <label className={`text-sm font-medium text-gray-700 mb-2 block ${className}`}>
     {children}
   </label>
 );
 
-const AppStateContext = createContext(null);
-
-const AppStateProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null);
-
-  const value = useMemo(() => ({
-    currentUser,
-    setCurrentUser,
-  }), [currentUser]);
-
-  return (
-    <AppStateContext.Provider value={value}>
-      {children}
-    </AppStateContext.Provider>
-  );
-};
-
-const useAppState = () => {
-  const context = useContext(AppStateContext);
-  if (context === null) {
-    throw new Error("useAppState must be used within an AppStateProvider");
-  }
-  return context;
-};
+import { endpoints } from "../../lib/api-config";
+import { useAppState } from "@/context/app-state";
+import { useNavigate } from "react-router-dom";
 
 const ErrorModal = ({ message, onClose }) => (
   <motion.div
@@ -100,6 +79,7 @@ const ErrorModal = ({ message, onClose }) => (
 );
 
 export function Login() {
+  const navigate = useNavigate();
   const { setCurrentUser } = useAppState();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -112,8 +92,6 @@ export function Login() {
     const r = params.get("role");
     return r === "doctor" ? "doctor" : "patient";
   }, []);
-
-  const API_URL = role === "doctor" ? "/api/doctor" : "/api/patient";
 
   async function handleLogin() {
     setError(null);
@@ -128,32 +106,40 @@ export function Login() {
     }
 
     try {
-      const loginEndpoint = role === "doctor" ? "login-doctor" : "login-patient";
-      const response = await axios.post(`${API_URL}/${loginEndpoint}`, { email, password });
+      const response = await axios.post(`${endpoints.auth}/login`, { email, password }, {
+        withCredentials: true // ensure cookies are saved
+      });
 
       const data = response.data;
+      const dbUser = data.user;
+
       const user = {
-        id: data.data.user._id,
-        name: data.data.user.name,
-        email: data.data.user.email,
-        role: data.data.user.role,
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+        role: dbUser.role, // Use role from DB
+
+        dosha: dbUser.dosha || null,
       };
+
+      if (role === 'doctor') {
+        // Handled centrally by AppState
+      } else {
+        // Handled centrally by AppState
+      }
       
-      localStorage.setItem("app:currentUser", JSON.stringify(user));
       setCurrentUser(user);
 
-      setTimeout(() => {
-        if (user.role === "doctor") {
-          window.location.assign("/doctor");
-        } else {
-          window.location.assign("/dashboard");
-        }
-      }, 100);
+      if (user.role === "doctor") {
+        navigate("/doctor", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
 
     } catch (err) {
       console.error("Login error:", err);
       if (err.response) {
-        setError(err.response.data.message || "Login failed. Please check your credentials.");
+        setError(err.response.data.detail || err.response.data.message || "Login failed. Please check your credentials.");
       } else if (err.request) {
         setError("Could not connect to the backend server. Please ensure it is running.");
       } else {
@@ -286,10 +272,4 @@ export function Login() {
   );
 }
 
-export default function App() {
-  return (
-    <AppStateProvider>
-      <Login />
-    </AppStateProvider>
-  );
-}
+export default Login;

@@ -20,20 +20,24 @@ export default function PatientVerification({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
+  const getId = (r: any) => (r?.patientId || r?.userId || r?.id || "").toString();
+  const getName = (r: any) => r?.patientName || r?.patient_name || r?.name || (getId(r) ? `Patient ${getId(r)}` : "");
+  const getDosha = (r: any) => r?.patientDosha || r?.patient_dosha || r?.dosha || r?.ayurvedic_category || "";
+
   const suggestions = useMemo(() => {
     const q = patientId.trim().toLowerCase();
     if (!q) return [] as any[];
     const seen: Record<string, boolean> = {};
-    // match by userId startsWith or name includes
     const list = requests
       .filter(
         (r) =>
-          r.userId.toLowerCase().startsWith(q) ||
-          (r.patientName || "").toLowerCase().includes(q),
+          getId(r).toLowerCase().startsWith(q) ||
+          getName(r).toLowerCase().includes(q),
       )
       .filter((r) => {
-        if (seen[r.userId]) return false;
-        seen[r.userId] = true;
+        const id = getId(r);
+        if (!id || seen[id]) return false;
+        seen[id] = true;
         return true;
       })
       .slice(0, 8);
@@ -44,11 +48,11 @@ export default function PatientVerification({
     const q = patientId.trim().toLowerCase();
     const match = requests.find(
       (r) =>
-        r.userId.toLowerCase() === q ||
-        (r.patientName || "").toLowerCase() === q,
+        getId(r).toLowerCase() === q ||
+        getName(r).toLowerCase() === q,
     );
     if (match) {
-      setFetchedName(match.patientName || `Patient ${match.userId}`);
+      setFetchedName(getName(match));
       setFetchError(null);
     } else {
       setFetchedName(null);
@@ -86,13 +90,15 @@ export default function PatientVerification({
             <div className="absolute z-20 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-sm">
               <ul className="max-h-64 overflow-auto py-1">
                 {suggestions.map((s) => (
-                  <li key={s.userId}>
+                  <li key={getId(s) || Math.random()}>
                     <button
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
-                        setPatientId(s.userId);
-                        setFetchedName(s.patientName || `Patient ${s.userId}`);
+                        const id = getId(s);
+                        const name = getName(s);
+                        setPatientId(id);
+                        setFetchedName(name);
                         setFetchError(null);
                         setOpen(false);
                       }}
@@ -101,11 +107,11 @@ export default function PatientVerification({
                       <User className="h-4 w-4 opacity-70" />
                       <div className="flex-1">
                         <div className="text-sm font-medium">
-                          {s.patientName || `Patient ${s.userId}`}
+                          {getName(s)}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          ID: {s.userId}
-                          {s.patientDosha ? ` • Dosha: ${s.patientDosha}` : ""}
+                          ID: {getId(s)}
+                          {getDosha(s) ? ` • Dosha: ${getDosha(s)}` : ""}
                         </div>
                       </div>
                     </button>

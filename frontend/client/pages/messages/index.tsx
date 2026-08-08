@@ -10,40 +10,51 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
 export default function MessagesPage() {
-  const { currentUser, doctors, requests } = useAppState();
+  const { currentUser, doctors, requests, conversations, setMessagingMounted } = useAppState();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    setMessagingMounted(true);
+    return () => setMessagingMounted(false);
+  }, []);
 
   const [searchQuery, setSearchQuery] = React.useState('');
   
   // Get the list of consulted doctors with last message info
   const consultedDoctors = React.useMemo(() => {
     if (!currentUser) return [];
-    
-    // For demo purposes, show all doctors as consulted
-    const allDoctors = [...doctors].map(doctor => ({
-      ...doctor,
-      lastMessage: 'How are you feeling today?',
-      unreadCount: Math.floor(Math.random() * 5), // Random unread count for demo
-      lastMessageTime: new Date(Date.now() - Math.floor(Math.random() * 7) * 24 * 60 * 60 * 1000), // Random time in last 7 days
-    }));
-    
-    // Filter by search query
-    const filtered = searchQuery
-      ? allDoctors.filter(doctor =>
-          doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          doctor.specialty.toLowerCase().includes(searchQuery.toLowerCase())
+
+    // Get doctor IDs user has interacted with
+    const interactedDoctorIds = new Set<string>(
+      requests
+        .filter((r) => r.userId === currentUser.id)
+        .map((r) => r.doctorId)
+    );
+
+    Object.keys(conversations).forEach((id) => interactedDoctorIds.add(id));
+
+    const doctorList = doctors
+      .filter((d) => interactedDoctorIds.size === 0 || interactedDoctorIds.has(d.id))
+      .map((doctor) => {
+        const thread = conversations[doctor.id] || [];
+        const last = thread[thread.length - 1];
+        return {
+          ...doctor,
+          lastMessage: last ? last.text : "No messages yet",
+          unreadCount: 0,
+          lastMessageTime: last ? new Date(last.ts) : null,
+        };
+      });
+
+    return searchQuery
+      ? doctorList.filter(
+          (doctor) =>
+            doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            doctor.specialty.toLowerCase().includes(searchQuery.toLowerCase())
         )
-      : allDoctors;
-    
-    // Sort by most recent message
-    return filtered.sort((a, b) => b.lastMessageTime.getTime() - a.lastMessageTime.getTime());
-    
-    // In a real app, you would use this logic:
-    // const consultedDoctorIds = requests
-    //   .filter(r => r.userId === currentUser.id && r.status === 'accepted')
-    //   .map(r => r.doctorId);
-    // return doctors.filter(d => consultedDoctorIds.includes(d.id));
-  }, [currentUser, doctors, requests, searchQuery]);
+      : doctorList;
+  }, [currentUser, doctors, requests, conversations, searchQuery]);
+
 
   if (!currentUser) {
     return (
@@ -136,7 +147,7 @@ export default function MessagesPage() {
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium truncate">{doctor.name}</p>
                         <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {doctor.lastMessageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {doctor.lastMessageTime ? doctor.lastMessageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground truncate">

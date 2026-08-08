@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAppState, type ConsultRequest } from "@/context/app-state";
+import { useAppState } from "@/context/app-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import axios from "axios";
 import {
   Clock,
   CheckCircle,
@@ -15,145 +16,106 @@ import {
   ArrowLeft
 } from "lucide-react";
 
+type ConsultationRecord = {
+  id: string;
+  status: "pending" | "accepted" | "rejected" | "completed";
+  patientName: string;
+  patientDosha: string;
+  symptoms: string;
+  createdAt: string;
+  updatedAt?: string;
+  acceptedDate?: string;
+  patientId?: { name: string; dosha?: string; age?: number; gender?: string; phone?: string };
+};
+
 export default function DoctorDashboard() {
-  const { currentUser, doctors, requests, setRequests } = useAppState();
+  const { currentUser, updateConsultRequestStatus } = useAppState();
   const navigate = useNavigate();
-  const [selectedPatient, setSelectedPatient] = useState<ConsultRequest | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<ConsultationRecord | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [consultations, setConsultations] = useState<ConsultationRecord[]>([]);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Get the doctor profile ID (same logic as DoctorPatients)
-  const getDoctorProfileId = () => {
-    const key = `app:doctor-map:${currentUser?.id || "anon"}`;
-    let mapped = localStorage.getItem(key);
-    if (!mapped) {
-      mapped = doctors[0]?.id || "d1";
-      localStorage.setItem(key, mapped);
+  const fetchConsultations = async () => {
+    try {
+      const res = await axios.get("/api/consultation/doctor");
+      if (res.data.success) {
+        const mapped = res.data.data.map((c: any) => ({
+          id: c._id,
+          status: c.status,
+          patientName: c.patientName || c.patientId?.name || "Unknown",
+          patientDosha: c.patientDosha || c.patientId?.dosha || "N/A",
+          symptoms: c.symptoms || "No symptoms provided",
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          acceptedDate: c.status === "accepted" ? c.updatedAt : undefined,
+          patientId: c.patientId,
+        }));
+        setConsultations(mapped);
+      }
+    } catch (e) {
+      console.error("Failed to fetch doctor consultations:", e);
     }
-    return mapped;
   };
-  const doctorProfileId = getDoctorProfileId();
 
-  // Show ALL requests (not filtered by doctor) so you can see and accept them
-  const allRequests = requests;
+  useEffect(() => {
+    if (currentUser) fetchConsultations();
+  }, [currentUser]);
 
-  // Get pending requests
   const pendingRequests = useMemo(() =>
-    allRequests.filter(request => request.status === "pending"),
-    [allRequests]
+    consultations.filter(c => c.status === "pending"),
+    [consultations]
   );
 
-  // Get counts for different statuses
   const stats = useMemo(() => ({
-    pending: allRequests.filter(r => r.status === "pending").length,
-    active: allRequests.filter(r => r.status === "accepted").length,
-    consulted: allRequests.filter(r => r.status === "rejected").length, // Using rejected as consulted
-    total: allRequests.length,
-  }), [allRequests]);
+    pending: consultations.filter(c => c.status === "pending").length,
+    active: consultations.filter(c => c.status === "accepted").length,
+    consulted: consultations.filter(c => c.status === "completed").length,
+    total: consultations.length,
+  }), [consultations]);
 
-  // Helper function to get patient name
-  const getPatientName = (request: ConsultRequest) => {
-    return request.patientName || request.patientProfile?.name || "Unknown Patient";
+  const getPatientName = (r: ConsultationRecord) => r.patientName;
+  const getPatientDosha = (r: ConsultationRecord) => r.patientDosha;
+  const getPatientAge = (r: ConsultationRecord) => r.patientId?.age || 0;
+  const getPatientGender = (r: ConsultationRecord) => r.patientId?.gender || "N/A";
+  const getPatientSymptoms = (r: ConsultationRecord) => r.symptoms;
+  const getPatientWeight = (_r: ConsultationRecord) => null;
+  const getPatientHeight = (_r: ConsultationRecord) => null;
+  const getPatientEmergencyContact = (_r: ConsultationRecord) => "Contact via platform";
+  const getPatientLifestyle = (_r: ConsultationRecord) => "Not provided";
+  const getPatientDocuments = (_r: ConsultationRecord) => [];
+
+  const handleSelectPatient = (request: ConsultationRecord) => {
+    setSelectedPatient(request);
+    setSearchParams({ patient: request.id });
   };
 
-  // Helper function to get patient dosha
-  const getPatientDosha = (request: ConsultRequest) => {
-    return request.patientDosha || request.patientProfile?.dosha || "N/A";
-  };
-
-  // Helper function to get patient age
-  const getPatientAge = (request: ConsultRequest) => {
-    return request.age || request.patientProfile?.age || 0;
-  };
-
-  // Helper function to get patient gender
-  const getPatientGender = (request: ConsultRequest) => {
-    return request.gender || request.patientProfile?.gender || "N/A";
-  };
-
-  // Helper function to get patient symptoms
-  const getPatientSymptoms = (request: ConsultRequest) => {
-    return request.symptoms || request.patientProfile?.conditions || "No symptoms provided";
-  };
-
-  // Helper function to get patient weight
-  const getPatientWeight = (request: ConsultRequest) => {
-    return request.weight || request.patientProfile?.weight;
-  };
-
-  // Helper function to get patient height
-  const getPatientHeight = (request: ConsultRequest) => {
-    return request.height || request.patientProfile?.height;
-  };
-
-  // Helper function to get patient emergency contact
-  const getPatientEmergencyContact = (request: ConsultRequest) => {
-    return request.emergencyContact || request.patientProfile?.emergencyContact || "No emergency contact provided";
-  };
-
-  // Helper function to get patient lifestyle
-  const getPatientLifestyle = (request: ConsultRequest) => {
-    return request.lifestyle || request.patientProfile?.lifestyle || "No lifestyle information provided";
-  };
-
-  // Helper function to get patient documents
-  const getPatientDocuments = (request: ConsultRequest) => {
-    return request.documents || request.patientProfile?.documents || [];
-  };
-
-  // Handle patient selection
-  const handleSelectPatient = (request: ConsultRequest) => {
-    if (request?.id) {
-      setSelectedPatient(request);
-      setSearchParams({ patient: request.id });
+  const handleUpdateStatus = async (id: string, status: "accepted" | "rejected") => {
+    setActionLoading(id + status);
+    try {
+      await updateConsultRequestStatus(id, status);
+      await fetchConsultations();
+      if (selectedPatient?.id === id) {
+        setSelectedPatient(prev => prev ? { ...prev, status } : null);
+      }
+    } catch (e) {
+      console.error("Failed to update consultation status:", e);
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  // Handle accepting a request
-  const handleAcceptRequest = (id: string) => {
-    console.log("DoctorDashboard - Accepting request:", {
-      requestId: id,
-      doctorProfileId,
-      currentUserId: currentUser?.id
-    });
-
-    setRequests(prevRequests =>
-      prevRequests.map(request =>
-        request.id === id
-          ? { ...request, status: "accepted" as const, doctorId: doctorProfileId, acceptedDate: new Date().toISOString() }
-          : request
-      )
-    );
-
-    // Update selected patient if it's the current one
-    if (selectedPatient?.id === id) {
-      setSelectedPatient(prev => prev ? { ...prev, status: "accepted", doctorId: doctorProfileId, acceptedDate: new Date().toISOString() } : null);
-    }
-  };
-
-  // Handle rejecting a request
-  const handleRejectRequest = (id: string) => {
-    setRequests(prevRequests =>
-      prevRequests.map(request =>
-        request.id === id
-          ? { ...request, status: "rejected" as const }
-          : request
-      )
-    );
-
-    // Update selected patient if it's the current one
-    if (selectedPatient?.id === id) {
-      setSelectedPatient(prev => prev ? { ...prev, status: "rejected" } : null);
-    }
-  };
+  const handleAcceptRequest = (id: string) => handleUpdateStatus(id, "accepted");
+  const handleRejectRequest = (id: string) => handleUpdateStatus(id, "rejected");
 
   // Load selected patient from URL on mount
   useEffect(() => {
     const patientId = searchParams.get("patient");
     if (patientId) {
-      const request = allRequests.find(r => r.id === patientId);
-      if (request) setSelectedPatient(request);
+      const record = consultations.find(c => c.id === patientId);
+      if (record) setSelectedPatient(record);
     }
-  }, [searchParams, allRequests]);
+  }, [searchParams, consultations]);
 
   // If a patient is selected, show patient details
   if (selectedPatient) {
@@ -598,17 +560,19 @@ export default function DoctorDashboard() {
                       <Button
                         variant="outline"
                         size="sm"
+                        disabled={!!actionLoading}
                         onClick={() => handleRejectRequest(request.id)}
                         className="border-gray-300 text-gray-700 hover:bg-gray-50"
                       >
-                        Decline
+                        {actionLoading === request.id + "rejected" ? "..." : "Decline"}
                       </Button>
                       <Button
                         size="sm"
+                        disabled={!!actionLoading}
                         onClick={() => handleAcceptRequest(request.id)}
                         className="bg-blue-600 hover:bg-blue-700 text-white"
                       >
-                        Accept
+                        {actionLoading === request.id + "accepted" ? "..." : "Accept"}
                       </Button>
                     </div>
                   </div>
