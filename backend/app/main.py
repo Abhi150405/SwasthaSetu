@@ -100,10 +100,12 @@ if "http://localhost:5173" not in cors_origins:
     cors_origins.append("http://localhost:5173")
 if "http://192.168.1.111:5173" not in cors_origins:
     cors_origins.append("http://192.168.1.111:5173")
+if "https://swastha-setu-seven.vercel.app" not in cors_origins:
+    cors_origins.append("https://swastha-setu-seven.vercel.app")
 
+# Regex to match all Vercel deployment domains (*.vercel.app), localhost, and local Wi-Fi subnets
+allow_origin_regex = r"https?://([a-zA-Z0-9-]+\.vercel\.app|localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?"
 
-# Regex to match localhost, 127.0.0.1, and local Wi-Fi IPs (e.g. http://192.168.x.x:5173) for mobile testing
-allow_origin_regex = r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?"
 
 app.add_middleware(
     CORSMiddleware,
