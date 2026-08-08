@@ -49,7 +49,8 @@ export default function Dashboard() {
     setAiLoading(true);
 
     try {
-      const response = await axios.post(`${endpoints.ai}/ask`, { question: userMsg });
+      const response = await axios.post(`${endpoints.ai}/ask`, { question: userMsg }, { withCredentials: true });
+
 
       if (response.data.success) {
         let reply = response.data.answer || "";

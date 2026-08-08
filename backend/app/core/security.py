@@ -74,3 +74,10 @@ async def get_current_user(request: Request) -> User:
         raise HTTPException(status_code=401, detail="User not found")
     
     return user
+
+async def get_current_user_optional(request: Request) -> Optional[User]:
+    try:
+        return await get_current_user(request)
+    except Exception:
+        return None
+

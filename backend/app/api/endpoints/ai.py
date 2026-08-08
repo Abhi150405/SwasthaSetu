@@ -7,7 +7,8 @@ import json
 import asyncio
 from app.services.rag_service import rag_service
 from app.core.config import settings
-from app.core.security import get_current_user
+import os
+from app.core.security import get_current_user, get_current_user_optional
 from app.models.user import User
 
 router = APIRouter()
@@ -17,7 +18,8 @@ class AIRequest(BaseModel):
     patientContext: Optional[Any] = None
 
 @router.post("/ask", summary="Ask the AI health assistant", response_description="AI-generated answer with optional action tags")
-async def ask_ai(request: AIRequest, current_user: User = Depends(get_current_user)):
+async def ask_ai(request: AIRequest, current_user: Optional[User] = Depends(get_current_user_optional)):
+
     if not request.question:
         raise HTTPException(status_code=400, detail="Question is required")
 

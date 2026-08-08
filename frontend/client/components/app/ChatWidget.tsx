@@ -379,10 +379,10 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
       };
 
       const response = await axios.post(`${endpoints.ai}/ask`, {
-
         question: text,
         patientContext
-      });
+      }, { withCredentials: true });
+
 
       if (response.data.success) {
         let reply = response.data.answer;
