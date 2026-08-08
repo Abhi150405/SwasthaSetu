@@ -4,6 +4,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAppState } from "@/context/app-state";
 import axios from "axios";
 import { toast } from "sonner";
+import { endpoints } from "@/lib/api-config";
+
 import {
   Card,
   CardContent,
@@ -126,7 +128,8 @@ export default function DoctorRecipeGenerator() {
 
     setIsLoading(true);
     try {
-      const response = await axios.post("/api/recipe/generate", {
+      const response = await axios.post(`${endpoints.recipe}/generate`, {
+
         mealName: targetMeal,
         patientName: fetchedName,
         dosha: dosha

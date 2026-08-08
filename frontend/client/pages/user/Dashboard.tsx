@@ -11,8 +11,10 @@ import { ChefHat, Salad, Stethoscope, ScanLine, Bot, Droplet, MessageCircle, Sen
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import axios from "axios";
+import { endpoints } from "@/lib/api-config";
 
 export default function Dashboard() {
+
   const navigate = useNavigate();
   const {
     currentUser,
@@ -47,7 +49,8 @@ export default function Dashboard() {
     setAiLoading(true);
 
     try {
-      const response = await axios.post("/api/ai/ask", { question: userMsg });
+      const response = await axios.post(`${endpoints.ai}/ask`, { question: userMsg });
+
       if (response.data.success) {
         let reply = response.data.answer || "";
 

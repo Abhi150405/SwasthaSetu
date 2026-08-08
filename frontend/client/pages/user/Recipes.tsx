@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useAppState } from "@/context/app-state";
 import axios from "axios";
 import { toast } from "sonner";
+import { endpoints } from "@/lib/api-config";
 
 export default function Recipes() {
   const { userProfile } = useAppState();
@@ -34,11 +35,12 @@ export default function Recipes() {
 
     setIsLoading(true);
     try {
-      const response = await axios.post("/api/recipe/generate", {
+      const response = await axios.post(`${endpoints.recipe}/generate`, {
         mealName: mealName.trim(),
         patientName: userProfile?.name || "Patient",
         dosha: userProfile?.dosha || "Balanced"
       }, { withCredentials: true });
+
 
       if (response.data.success && response.data.data) {
         setRecipe(response.data.data);

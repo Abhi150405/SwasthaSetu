@@ -23,6 +23,8 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Camera, MessageCircle, Mic, MicOff, Send, Volume2, VolumeX } from "lucide-react";
+import { endpoints } from "@/lib/api-config";
+
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAppState } from "@/context/app-state";
@@ -376,7 +378,8 @@ export const ChatWidget: React.FC<{ mode?: "floating" | "panel" }> = ({
         doctorInfo: currentUser?.role === 'doctor' ? doctorProfile : null
       };
 
-      const response = await axios.post("/api/ai/ask", {
+      const response = await axios.post(`${endpoints.ai}/ask`, {
+
         question: text,
         patientContext
       });

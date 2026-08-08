@@ -566,7 +566,8 @@ export default function Register() {
         try {
           const formData = new FormData();
           formData.append("file", values.medical_history);
-          const uploadRes = await axios.post("/api/files/upload", formData);
+          const uploadRes = await axios.post(`${endpoints.files}/upload`, formData);
+
           if (uploadRes.data?.url) {
             uploadedUrl = uploadRes.data.url;
           }

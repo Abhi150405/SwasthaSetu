@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppState, PatientProfile } from "@/context/app-state";
+import axios from "axios";
+import { endpoints } from "@/lib/api-config";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,9 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, FileText, ExternalLink, Download } from "lucide-react";
-import axios from "axios";
 
-import { endpoints } from "@/lib/api-config";
+
 
 export default function UserProfile() {
   const { currentUser, userProfile, setUserProfile } = useAppState();
@@ -150,7 +152,8 @@ export default function UserProfile() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await axios.post("/api/files/upload", formData, { withCredentials: true });
+      const res = await axios.post(`${endpoints.files}/upload`, formData, { withCredentials: true });
+
       if (res.data?.url) {
         const docType = file.type.includes("pdf") ? "pdf" : "image";
         const next = [

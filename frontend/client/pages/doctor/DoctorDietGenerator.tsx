@@ -6,6 +6,8 @@ import DietQuiz from "@/components/doctor/dietPlan/DietQuiz";
 import { Progress } from "@/components/ui/progress";
 import axios from "axios";
 import { toast } from "sonner";
+import { endpoints } from "@/lib/api-config";
+
 
 import {
   Card,
@@ -685,7 +687,8 @@ export default function DoctorDietGenerator() {
 
                   console.log("Generating AI diet for patient:", pId);
 
-                  const response = await axios.post("/api/diet/generate", {
+                  const response = await axios.post(`${endpoints.diet}/generate`, {
+
                     patientId: pId,
                     force_refresh: true,
                     age: match?.age || 30,
