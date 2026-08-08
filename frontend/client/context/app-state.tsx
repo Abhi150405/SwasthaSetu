@@ -243,7 +243,13 @@ const AppStateContext = createContext<AppState | null>(null);
 export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, _setCurrentUser] = useState<User | null>(() => load<User | null>("app:user", null));
+
+  const setCurrentUser = (u: User | null) => {
+    _setCurrentUser(u);
+    save("app:user", u);
+  };
+
   const [authInitialized, setAuthInitialized] = useState(false);
   const [progress, setProgress] = useState<Progress>(() =>
     load<Progress>("app:progress", {
@@ -452,19 +458,19 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const restoreSession = async () => {
       try {
-        let response = await fetch("/api/auth/me", {
+        let response = await fetch(`${endpoints.auth}/me`, {
           credentials: "include",
         });
 
         // If access token expired (401), attempt auto-refresh via refresh token cookie
         if (response.status === 401) {
           try {
-            const refreshRes = await fetch("/api/auth/refresh", {
+            const refreshRes = await fetch(`${endpoints.auth}/refresh`, {
               method: "POST",
               credentials: "include",
             });
             if (refreshRes.ok) {
-              response = await fetch("/api/auth/me", {
+              response = await fetch(`${endpoints.auth}/me`, {
                 credentials: "include",
               });
             }
@@ -473,7 +479,12 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         }
 
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (response.status === 401) {
+            setCurrentUser(null);
+          }
+          return;
+        }
 
         const result = await response.json();
         if (result?.id) {
@@ -499,7 +510,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
               bio: result.bio || "",
             });
           } else {
-            fetch(`/api/patient/profile/${result.id}`, { credentials: "include" })
+            fetch(`${endpoints.patient}/profile/${result.id}`, { credentials: "include" })
               .then(res => res.json())
               .then(data => {
                  if (data.success) {
@@ -540,6 +551,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
     restoreSession();
   }, []);
+
 
   useEffect(() => save("app:progress", progress), [progress]);
   // useEffect(() => save("app:dietPlan", dietPlan), [dietPlan]);

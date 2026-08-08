@@ -57,9 +57,8 @@ class LoginRequest(BaseModel):
     password: str
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
-    is_cross_domain = bool(os.getenv("CORS_ORIGIN") or os.getenv("ALLOWED_ORIGINS") or ("localhost" not in settings.DEV_ORIGIN))
-    samesite_val = "none" if is_cross_domain else "lax"
-    secure_val = True if is_cross_domain else False
+    samesite_val = "none"
+    secure_val = True
 
     response.set_cookie(
         key="accessToken",
@@ -80,12 +79,12 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
     )
 
 def clear_auth_cookies(response: Response):
-    is_cross_domain = bool(os.getenv("CORS_ORIGIN") or os.getenv("ALLOWED_ORIGINS") or ("localhost" not in settings.DEV_ORIGIN))
-    samesite_val = "none" if is_cross_domain else "lax"
-    secure_val = True if is_cross_domain else False
+    samesite_val = "none"
+    secure_val = True
 
     response.delete_cookie(key="accessToken", secure=secure_val, samesite=samesite_val)
     response.delete_cookie(key="refreshToken", secure=secure_val, samesite=samesite_val)
+
 
 @router.post("/register/patient")
 async def register_patient(payload: RegisterPatientRequest, response: Response):
