@@ -92,8 +92,11 @@ async def generate_recipe(request: RecipeRequest, current_user: User = Depends(g
 
         matching_foods_text = "\n".join(food_ref_table) if food_ref_table else "None specified"
         
-        # 3. Construct Prompt
-        client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+        api_key = settings.GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Google Gemini API Key is not configured on the server.")
+        client = genai.Client(api_key=api_key)
+
         
         prompt = f"""
         You are an expert Ayurvedic Chef and Nutritionist. 

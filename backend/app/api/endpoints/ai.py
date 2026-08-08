@@ -21,12 +21,21 @@ async def ask_ai(request: AIRequest, current_user: User = Depends(get_current_us
     if not request.question:
         raise HTTPException(status_code=400, detail="Question is required")
 
+    api_key = settings.GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Google Gemini API Key is not configured on the server.")
+
     try:
         # 1. RAG Retrieve
-        context = await rag_service.retrieve_context(request.question)
+        try:
+            context = await rag_service.retrieve_context(request.question)
+        except Exception as rag_err:
+            print(f"RAG Retrieval Error: {rag_err}")
+            context = ""
         
         # 2. Generate Answer
-        client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+        client = genai.Client(api_key=api_key)
+
         
         system_prompt = f"""
         You are Setu, an advanced agentic AI health assistant for the Swasthasetu platform.

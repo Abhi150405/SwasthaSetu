@@ -152,8 +152,11 @@ async def generate_diet_plan(request: DietRequest, current_user: User = Depends(
 
         preferred_foods_text = "\n".join(preferred_foods_table) if preferred_foods_table else "None specified"
 
-        # 3. Construct Prompt
-        client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+        api_key = settings.GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Google Gemini API Key is not configured on the server.")
+        client = genai.Client(api_key=api_key)
+
         
         prompt = f"""
           You are an expert Nutritionist and Ayurvedic Dietician.

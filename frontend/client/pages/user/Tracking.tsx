@@ -343,16 +343,83 @@ export default function Tracking() {
       };
     }
 
-    if (weeklyMealPlan[selectedDayIndex]) {
-      return weeklyMealPlan[selectedDayIndex].meals;
-    }
-
     return {
       breakfast: "Balanced Ayurvedic Breakfast",
       lunch: "Nutritious Ayurvedic Lunch",
       dinner: "Light Restorative Dinner"
     };
   }, [selectedDayIndex, week]);
+
+  const handleViewDetails = (mealType: string) => {
+
+    const selectedWeekDay = week[selectedDayIndex];
+    const rawMeal = selectedWeekDay?.rawDay?.meals?.find(
+      (m: any) => m.type.toLowerCase() === mealType.toLowerCase()
+    );
+
+    if (rawMeal) {
+      const itemsList = (rawMeal.items || []).map((i: any) => i.name).join(", ");
+      const cals = rawMeal.total_nutrition?.calories || 350;
+      const protein = rawMeal.total_nutrition?.protein ? `${rawMeal.total_nutrition.protein}g` : "12g";
+      const carbs = rawMeal.total_nutrition?.carbs ? `${rawMeal.total_nutrition.carbs}g` : "55g";
+      const fat = rawMeal.total_nutrition?.fat ? `${rawMeal.total_nutrition.fat}g` : "8g";
+
+      const rasas = Array.from(
+        new Set((rawMeal.items || []).flatMap((i: any) => i.ayurvedic_properties?.rasa || []))
+      ).join(", ") || "Sweet, Pungent";
+      
+      const virya = (rawMeal.items || []).find(
+        (i: any) => i.ayurvedic_properties?.virya
+      )?.ayurvedic_properties?.virya || "Warming & Balancing";
+
+      setSelectedMeal({
+        type: mealType as MealType,
+        details: {
+          title: `${mealType.charAt(0).toUpperCase() + mealType.slice(1)}: ${itemsList || "Ayurvedic Meal"}`,
+          description: `Prescribed Ayurvedic ${mealType} for ${selectedWeekDay.formattedDate}`,
+          ayurvedicInfo: {
+            dosha: selectedWeekDay.rawDay?.daily_dosha_balance
+              ? Object.entries(selectedWeekDay.rawDay.daily_dosha_balance)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(", ")
+              : "Balances Vata & Pitta",
+            qualities: `Virya: ${virya} | Rasa: ${rasas}`,
+            benefits: selectedWeekDay.rawDay?.special_recommendations || [
+              "Supports Agni (digestive fire)",
+              "Nourishes tissue layers (Dhatus)",
+              "Balances constitutional doshas"
+            ],
+            bestTime:
+              mealType.toLowerCase() === "breakfast"
+                ? "08:00 AM"
+                : mealType.toLowerCase() === "lunch"
+                ? "01:00 PM"
+                : "07:30 PM",
+            spices: "Cumin, Coriander, Fennel, Turmeric, Ginger"
+          },
+          modernNutrition: {
+            calories: cals,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            keyNutrients: (rawMeal.items || []).map((i: any) => `${i.name}: ${i.quantity || "Standard portion"}`)
+          },
+          ingredients: (rawMeal.items || []).map((i: any) => `${i.name} (${i.quantity || "Standard portion"})`),
+          instructions: rawMeal.cooking_instructions ? [rawMeal.cooking_instructions] : [
+            "Prepare fresh using organic ingredients.",
+            "Cook with ghee or light sesame oil.",
+            "Serve warm for optimal digestive absorption."
+          ]
+        }
+      });
+    } else {
+      setSelectedMeal({
+        type: mealType as MealType,
+        details: mealDetails[mealType as MealType] || mealDetails.breakfast
+      });
+    }
+  };
+
 
 
   // Debug: Log the chart data
@@ -662,12 +729,10 @@ export default function Tracking() {
                          mealType === 'lunch' ? '1:00 PM' : '8:00 PM'}
                       </span>
                       <button 
-                        onClick={() => setSelectedMeal({ 
-  type: mealType as MealType, 
-  details: mealDetails[mealType as MealType] 
-})}
+                        onClick={() => handleViewDetails(mealType)}
                         className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
                       >
+
                         View Details →
                       </button>
                     </div>
