@@ -21,10 +21,12 @@ services:
         sync: false
       - key: REFRESH_TOKEN_SECRET
         sync: false
-      - key: CLOUDINARY_CLOUD_NAME
+      - key: AWS_ACCESS_KEY_ID
         sync: false
-      - key: CLOUDINARY_API_KEY
+      - key: AWS_SECRET_ACCESS_KEY
         sync: false
-      - key: CLOUDINARY_API_SECRET
+      - key: AWS_STORAGE_BUCKET_NAME
+        sync: false
+      - key: AWS_REGION
         sync: false
 
