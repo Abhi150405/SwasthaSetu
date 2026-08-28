@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "@/context/app-state";
+import { API_BASE_URL } from "@/lib/api-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -38,18 +39,20 @@ export default function DoctorDashboard() {
 
   const fetchConsultations = async () => {
     try {
-      const res = await axios.get("/api/consultation/doctor");
+      const res = await axios.get(`${API_BASE_URL}/api/consultation/doctor`, {
+        withCredentials: true,
+      });
       if (res.data.success) {
         const mapped = res.data.data.map((c: any) => ({
-          id: c._id,
+          id: c._id || c.id,
           status: c.status,
-          patientName: c.patientName || c.patientId?.name || "Unknown",
-          patientDosha: c.patientDosha || c.patientId?.dosha || "N/A",
+          patientName: c.patientName || c.patientDetails?.name || (typeof c.patientId === "object" ? c.patientId?.name : undefined) || "Unknown",
+          patientDosha: c.patientDosha || c.patientDetails?.dosha || (typeof c.patientId === "object" ? c.patientId?.dosha : undefined) || "N/A",
           symptoms: c.symptoms || "No symptoms provided",
           createdAt: c.createdAt,
           updatedAt: c.updatedAt,
           acceptedDate: c.status === "accepted" ? c.updatedAt : undefined,
-          patientId: c.patientId,
+          patientId: c.patientDetails || (typeof c.patientId === "object" ? c.patientId : undefined),
         }));
         setConsultations(mapped);
       }

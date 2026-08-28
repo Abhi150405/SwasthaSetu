@@ -26,6 +26,22 @@ async def format_consultation(c: Consultation) -> dict:
     c_dict["id"] = str(c.id)
     c_dict["patientId"] = str(c.patientId)
 
+    if c.patientId:
+        try:
+            pat = await User.get(c.patientId, with_children=True)
+            if pat:
+                c_dict["patientDetails"] = {
+                    "_id": str(pat.id),
+                    "id": str(pat.id),
+                    "name": pat.name,
+                    "dosha": getattr(pat, "ayurvedic_category", None),
+                    "gender": getattr(pat, "gender", None),
+                    "phone": getattr(pat, "contact", None),
+                    "email": pat.email,
+                }
+        except Exception:
+            pass
+
     if c.doctorId:
         try:
             doc = await User.get(c.doctorId, with_children=True)
@@ -154,5 +170,15 @@ async def update_consultation_status(
         consultation.notes = payload.notes
 
     await consultation.save()
+
+    if payload.status == "accepted" and consultation.patientId:
+        try:
+            patient = await User.get(consultation.patientId, with_children=True)
+            if patient:
+                if not getattr(patient, "doctorId", None):
+                    patient.doctorId = current_user.id
+                    await patient.save()
+        except Exception as e:
+            print(f"Error linking patient on consultation accept: {e}")
 
     return {"success": True, "data": await format_consultation(consultation)}

@@ -22,19 +22,19 @@ export default defineConfig({
     },
     proxy: {
       '/api/ai': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:5001',
         changeOrigin: true,
       },
       '/api/recipe': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:5001',
         changeOrigin: true,
       },
       '/api/diet': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:5001',
         changeOrigin: true,
       },
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:5001',
         changeOrigin: true,
       },
     },
