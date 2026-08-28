@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
+import { API_BASE_URL } from "@/lib/api-config";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -95,7 +96,7 @@ export default function DoctorPatientView() {
   const handleSaveTargets = async () => {
     setIsSavingTargets(true);
     try {
-      const res = await fetch("/api/progress/targets", {
+      const res = await fetch(`${API_BASE_URL}/api/progress/targets`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -108,7 +109,7 @@ export default function DoctorPatientView() {
       const data = await res.json();
       if (res.ok && data.success) {
         setIsEditingTargets(false);
-        const hRes = await fetch(`/api/progress/history?limit=7&patient_id=${id}`, { credentials: "include" });
+        const hRes = await fetch(`${API_BASE_URL}/api/progress/history?limit=7&patient_id=${id}`, { credentials: "include" });
         const hData = await hRes.json();
         if (hData.success) setHistory(hData.data);
       }
@@ -123,9 +124,9 @@ export default function DoctorPatientView() {
     const fetchData = async () => {
       try {
         const [patientRes, dietRes, historyRes] = await Promise.all([
-          fetch(`/api/doctor/patients/${id}`).then(r => r.json()),
-          fetch(`/api/diet/patient/${id}`).then(r => r.json()),
-          fetch(`/api/progress/history?limit=7&patient_id=${id}`).then(r => r.json())
+          fetch(`${API_BASE_URL}/api/doctor/patients/${id}`, { credentials: "include" }).then(r => r.json()),
+          fetch(`${API_BASE_URL}/api/diet/patient/${id}`, { credentials: "include" }).then(r => r.json()),
+          fetch(`${API_BASE_URL}/api/progress/history?limit=7&patient_id=${id}`, { credentials: "include" }).then(r => r.json())
         ]);
         
         if (patientRes.success) {

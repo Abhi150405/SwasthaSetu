@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import axios from "axios";
-import { endpoints } from "@/lib/api-config";
+import { endpoints, API_BASE_URL } from "@/lib/api-config";
 
 
 export type Role = "patient" | "doctor";
@@ -265,7 +265,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
-        const response = await fetch("/api/doctor/all");
+        const response = await fetch(`${API_BASE_URL}/api/doctor/all`, { credentials: "include" });
         const result = await response.json();
         
         if (result.success && result.data) {
@@ -292,8 +292,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   const fetchRequests = async () => {
     if (!currentUser) return;
     try {
-      const endpoint = currentUser.role === "doctor" ? "/api/consultation/doctor" : "/api/consultation/patient";
-      const response = await fetch(endpoint);
+      const endpoint = currentUser.role === "doctor" ? `${API_BASE_URL}/api/consultation/doctor` : `${API_BASE_URL}/api/consultation/patient`;
+      const response = await fetch(endpoint, { credentials: "include" });
       const result = await response.json();
       if (result.success && result.data) {
         const mapped = result.data.map((c: any) => ({
@@ -313,9 +313,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const createConsultRequest = async (payload: any) => {
     try {
-      const response = await fetch("/api/consultation/request", {
+      const response = await fetch(`${API_BASE_URL}/api/consultation/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
       const result = await response.json();
@@ -331,9 +332,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const updateConsultRequestStatus = async (id: string, status: string, notes?: string) => {
     try {
-      const response = await fetch(`/api/consultation/${id}/status`, {
+      const response = await fetch(`${API_BASE_URL}/api/consultation/${id}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ status, notes }),
       });
       const result = await response.json();
@@ -410,7 +412,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
     if (messagingMounted) {
       const fetchConversationsList = async () => {
         try {
-          await fetch("/api/messages/conversations");
+          await fetch(`${API_BASE_URL}/api/messages/conversations`, { credentials: "include" });
         } catch (e) {
           console.error("Failed to fetch conversations list:", e);
         }
@@ -429,7 +431,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
 
       const fetchChatHistory = async () => {
         try {
-          const res = await fetch(`/api/messages/${otherUserId}`);
+          const res = await fetch(`${API_BASE_URL}/api/messages/${otherUserId}`, { credentials: "include" });
           const result = await res.json();
           if (result.success) {
             setConversations((prev) => ({
@@ -448,7 +450,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       };
 
-      fetch(`/api/messages/${otherUserId}/read`, { method: "PUT" }).catch(console.error);
+      fetch(`${API_BASE_URL}/api/messages/${otherUserId}/read`, { method: "PUT", credentials: "include" }).catch(console.error);
       fetchChatHistory();
       interval = setInterval(fetchChatHistory, 3500);
     }
@@ -565,9 +567,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   const setUserProfile = async (p: PatientProfile) => {
     _setUserProfile(p);
     try {
-      await fetch(`/api/patient/profile/${p.id}`, {
+      await fetch(`${API_BASE_URL}/api/patient/profile/${p.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(p),
       });
     } catch (error) {
@@ -578,9 +581,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   const setDoctorProfile = async (p: DoctorSelfProfile) => {
     _setDoctorProfile(p);
     try {
-      await fetch(`/api/doctor/profile/${p.id}`, {
+      await fetch(`${API_BASE_URL}/api/doctor/profile/${p.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(p),
       });
     } catch (error) {
@@ -601,7 +605,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
     if (currentUser) {
       setLastSeenTime(Date.now());
       try {
-        await fetch("/api/auth/notifications-seen", { method: "PUT" });
+        await fetch(`${API_BASE_URL}/api/auth/notifications-seen`, { method: "PUT", credentials: "include" });
       } catch (error) {
         console.error("Failed to mark notifications seen:", error);
       }
@@ -614,7 +618,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   const fetchTodayProgress = async () => {
     if (!currentUser || currentUser.role !== "patient") return;
     try {
-      const response = await fetch("/api/progress/today", { credentials: "include" });
+      const response = await fetch(`${API_BASE_URL}/api/progress/today`, { credentials: "include" });
       const result = await response.json();
       if (result.success && result.data) {
         const data = result.data;
@@ -678,7 +682,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
     }));
 
     try {
-      await fetch("/api/progress/water", {
+      await fetch(`${API_BASE_URL}/api/progress/water`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: deltaMl }),
@@ -706,7 +710,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
     }));
 
     try {
-      await fetch("/api/progress/meal", {
+      await fetch(`${API_BASE_URL}/api/progress/meal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ meal_type: type }),
@@ -726,9 +730,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
   const generateMockPlan = async (overrides?: Partial<DietPlan>): Promise<DietPlan | null> => {
     if (!currentUser) return null;
     try {
-      const response = await fetch("/api/diet/generate", {
+      const response = await fetch(`${API_BASE_URL}/api/diet/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           patientId: currentUser.id,
           age: userProfile?.age || 30,
@@ -788,9 +793,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({
       const otherUserId = getOtherUserId(requestId);
       if (otherUserId) {
         try {
-          await fetch(`/api/messages/${otherUserId}`, {
+          await fetch(`${API_BASE_URL}/api/messages/${otherUserId}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ text: msg.text }),
           });
         } catch (e) {

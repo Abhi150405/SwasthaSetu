@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { API_BASE_URL } from "@/lib/api-config";
 import { useNavigate } from "react-router-dom";
 import { useForm, FormProvider, useFormContext } from "react-hook-form";
 import { z } from "zod";
@@ -226,8 +227,9 @@ export default function AddPatient() {
     if (medicalHistoryFile) formData.append("medical_history", medicalHistoryFile);
 
     try {
-      const res = await fetch("/api/doctor/patients", {
+      const res = await fetch(`${API_BASE_URL}/api/doctor/patients`, {
         method: "POST",
+        credentials: "include",
         body: formData,
       });
       const data = await res.json();

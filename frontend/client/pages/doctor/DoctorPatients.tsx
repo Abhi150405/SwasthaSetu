@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { API_BASE_URL } from "@/lib/api-config";
 import { useNavigate } from "react-router-dom";
 import { useAppState } from "@/context/app-state";
 import {
@@ -84,7 +85,7 @@ export default function DoctorPatients() {
   useEffect(() => {
     const fetchPatients = async () => {
       try {
-        const res = await fetch("/api/doctor/patients");
+        const res = await fetch(`${API_BASE_URL}/api/doctor/patients`, { credentials: "include" });
         const data = await res.json();
         if (data.success) {
           setMyPatients(data.data);

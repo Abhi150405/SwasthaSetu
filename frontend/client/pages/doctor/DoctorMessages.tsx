@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
+import { API_BASE_URL } from "@/lib/api-config";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAppState } from "@/context/app-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +25,7 @@ export default function DoctorMessages() {
   useEffect(() => {
     const fetchPatients = async () => {
       try {
-        const res = await fetch("/api/doctor/patients");
+        const res = await fetch(`${API_BASE_URL}/api/doctor/patients`, { credentials: "include" });
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
           setApiPatients(data.data);
