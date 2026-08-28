@@ -52,6 +52,137 @@ def is_suitable_for_dosha(dosha_effects: dict, dosha: str) -> bool:
         return False
     return True
 
+DEFAULT_MEAL_NUTRITION = {
+    "breakfast": {"calories": 380, "protein": 14, "carbs": 52, "fat": 10},
+    "lunch": {"calories": 580, "protein": 22, "carbs": 75, "fat": 16},
+    "dinner": {"calories": 480, "protein": 18, "carbs": 62, "fat": 12},
+    "snack": {"calories": 210, "protein": 6, "carbs": 28, "fat": 6},
+    "default": {"calories": 400, "protein": 15, "carbs": 55, "fat": 10}
+}
+
+def ensure_nutritional_info(plan_list: list) -> list:
+    if not isinstance(plan_list, list):
+        return plan_list
+
+    for day in plan_list:
+        if not isinstance(day, dict):
+            continue
+        
+        day_cals, day_protein, day_carbs, day_fat = 0.0, 0.0, 0.0, 0.0
+        meals = day.get("meals", [])
+        if isinstance(meals, list):
+            for meal in meals:
+                if not isinstance(meal, dict):
+                    continue
+                
+                meal_type = str(meal.get("type", "")).lower()
+                def_nut = DEFAULT_MEAL_NUTRITION.get(meal_type, DEFAULT_MEAL_NUTRITION["default"])
+                
+                # Check items first
+                items = meal.get("items", [])
+                item_cals, item_protein, item_carbs, item_fat = 0.0, 0.0, 0.0, 0.0
+                
+                if isinstance(items, list) and len(items) > 0:
+                    per_item_cals = max(50, int(def_nut["calories"] / len(items)))
+                    per_item_protein = max(2, int(def_nut["protein"] / len(items)))
+                    per_item_carbs = max(8, int(def_nut["carbs"] / len(items)))
+                    per_item_fat = max(1, int(def_nut["fat"] / len(items)))
+
+                    for item in items:
+                        if not isinstance(item, dict):
+                            continue
+                        info = item.get("nutritional_info", {})
+                        if not isinstance(info, dict):
+                            info = {}
+                        
+                        try: cals = float(info.get("calories") or 0)
+                        except (ValueError, TypeError): cals = 0.0
+                        try: prot = float(info.get("protein") or 0)
+                        except (ValueError, TypeError): prot = 0.0
+                        try: carb = float(info.get("carbs") or 0)
+                        except (ValueError, TypeError): carb = 0.0
+                        try: fat = float(info.get("fat") or 0)
+                        except (ValueError, TypeError): fat = 0.0
+
+                        if cals <= 0: cals = float(per_item_cals)
+                        if prot <= 0: prot = float(per_item_protein)
+                        if carb <= 0: carb = float(per_item_carbs)
+                        if fat <= 0: fat = float(per_item_fat)
+
+                        item["nutritional_info"] = {
+                            "calories": round(cals, 1),
+                            "protein": round(prot, 1),
+                            "carbs": round(carb, 1),
+                            "fat": round(fat, 1)
+                        }
+                        item_cals += cals
+                        item_protein += prot
+                        item_carbs += carb
+                        item_fat += fat
+
+                # Determine total_nutrition for meal
+                tot = meal.get("total_nutrition", {})
+                if not isinstance(tot, dict):
+                    tot = {}
+                
+                try: mcals = float(tot.get("calories") or 0)
+                except (ValueError, TypeError): mcals = 0.0
+                try: mprot = float(tot.get("protein") or 0)
+                except (ValueError, TypeError): mprot = 0.0
+                try: mcarb = float(tot.get("carbs") or 0)
+                except (ValueError, TypeError): mcarb = 0.0
+                try: mfat = float(tot.get("fat") or 0)
+                except (ValueError, TypeError): mfat = 0.0
+
+                if mcals <= 0:
+                    mcals = item_cals if item_cals > 0 else float(def_nut["calories"])
+                if mprot <= 0:
+                    mprot = item_protein if item_protein > 0 else float(def_nut["protein"])
+                if mcarb <= 0:
+                    mcarb = item_carbs if item_carbs > 0 else float(def_nut["carbs"])
+                if mfat <= 0:
+                    mfat = item_fat if item_fat > 0 else float(def_nut["fat"])
+
+                meal["total_nutrition"] = {
+                    "calories": round(mcals, 1),
+                    "protein": round(mprot, 1),
+                    "carbs": round(mcarb, 1),
+                    "fat": round(mfat, 1)
+                }
+
+                day_cals += mcals
+                day_protein += mprot
+                day_carbs += mcarb
+                day_fat += mfat
+
+        # Daily nutrition summary
+        day_sum = day.get("daily_nutrition_summary", {})
+        if not isinstance(day_sum, dict):
+            day_sum = {}
+        
+        try: dcals = float(day_sum.get("calories") or 0)
+        except (ValueError, TypeError): dcals = 0.0
+        try: dprot = float(day_sum.get("protein") or 0)
+        except (ValueError, TypeError): dprot = 0.0
+        try: dcarb = float(day_sum.get("carbs") or 0)
+        except (ValueError, TypeError): dcarb = 0.0
+        try: dfat = float(day_sum.get("fat") or 0)
+        except (ValueError, TypeError): dfat = 0.0
+
+        if dcals <= 0: dcals = day_cals if day_cals > 0 else 1650.0
+        if dprot <= 0: dprot = day_protein if day_protein > 0 else 60.0
+        if dcarb <= 0: dcarb = day_carbs if day_carbs > 0 else 215.0
+        if dfat <= 0: dfat = day_fat if day_fat > 0 else 44.0
+
+        day["daily_nutrition_summary"] = {
+            "calories": round(dcals, 1),
+            "protein": round(dprot, 1),
+            "carbs": round(dcarb, 1),
+            "fat": round(dfat, 1)
+        }
+
+    return plan_list
+
 @router.post("/generate", summary="Generate and save a multi-day Ayurvedic diet plan")
 async def generate_diet_plan(request: DietRequest, current_user: User = Depends(get_current_user)):
     target_patient_id = request.patientId or str(current_user.id)
@@ -66,7 +197,7 @@ async def generate_diet_plan(request: DietRequest, current_user: User = Depends(
             ).sort("-createdAt").first_or_none()
 
             if existing_plan and existing_plan.plan:
-                plan_list = existing_plan.plan
+                plan_list = ensure_nutritional_info(existing_plan.plan)
                 created_dt = getattr(existing_plan, "createdAt", None) or datetime.now()
                 for idx, day_item in enumerate(plan_list):
                     if isinstance(day_item, dict):
@@ -74,7 +205,6 @@ async def generate_diet_plan(request: DietRequest, current_user: User = Depends(
                         day_item["date"] = p_date.strftime("%Y-%m-%d")
                         day_item["formatted_date"] = p_date.strftime("%a, %b %d")
                         day_item["generation_date"] = created_dt.strftime("%Y-%m-%d")
-
 
                 return {
                     "success": True,
@@ -196,22 +326,22 @@ async def generate_diet_plan(request: DietRequest, current_user: User = Depends(
                   {{
                     "type": "Breakfast",
                     "items": [
-                      {{ "name": "Food Name", "quantity": "Amount", "nutritional_info": {{ "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }} }}
+                      {{ "name": "Food Name", "quantity": "Amount", "nutritional_info": {{ "calories": 380, "protein": 14, "carbs": 52, "fat": 10 }} }}
                     ],
-                    "total_nutrition": {{ "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }}
+                    "total_nutrition": {{ "calories": 380, "protein": 14, "carbs": 52, "fat": 10 }}
                   }},
                    {{
                     "type": "Lunch",
                     "items": [],
-                    "total_nutrition": {{}}
+                    "total_nutrition": {{ "calories": 580, "protein": 22, "carbs": 75, "fat": 16 }}
                   }},
                    {{
                     "type": "Dinner",
                     "items": [],
-                    "total_nutrition": {{}}
+                    "total_nutrition": {{ "calories": 480, "protein": 18, "carbs": 62, "fat": 12 }}
                   }}
                 ],
-                "daily_nutrition_summary": {{ "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }},
+                "daily_nutrition_summary": {{ "calories": 1640, "protein": 54, "carbs": 189, "fat": 38 }},
                 "daily_dosha_balance": {{ "Vata": "balanced", "Pitta": "balanced", "Kapha": "balanced" }},
                 "special_recommendations": ["string"]
               }}
@@ -238,6 +368,10 @@ async def generate_diet_plan(request: DietRequest, current_user: User = Depends(
         text = result.text
         diet_data = json.loads(text)
         
+        # Ensure non-zero nutritional info across all generated days and meals
+        if diet_data.get("plan") and isinstance(diet_data["plan"], list):
+            diet_data["plan"] = ensure_nutritional_info(diet_data["plan"])
+
         # Attach sequential dates starting from today for 7 days
         start_dt = datetime.now()
         if diet_data.get("plan") and isinstance(diet_data["plan"], list):
@@ -278,6 +412,7 @@ async def get_patient_diet_plans(patient_id: str, current_user: User = Depends(g
         p_dict = plan_doc.model_dump()
         created_dt = getattr(plan_doc, "createdAt", None) or datetime.now()
         if p_dict.get("plan") and isinstance(p_dict["plan"], list):
+            p_dict["plan"] = ensure_nutritional_info(p_dict["plan"])
             for idx, day_item in enumerate(p_dict["plan"]):
                 if isinstance(day_item, dict):
                     p_date = created_dt + timedelta(days=idx)

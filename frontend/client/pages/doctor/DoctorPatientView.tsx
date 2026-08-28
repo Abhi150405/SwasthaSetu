@@ -230,7 +230,11 @@ export default function DoctorPatientView() {
         day.meal_log.forEach((ml: any) => {
           if (ml.status === 'completed') {
              const m = dayPlan.meals.find((xm: any) => xm.type.toLowerCase() === ml.meal_type.toLowerCase());
-             if (m) cals += m.total_nutrition?.calories || 0;
+             if (m) {
+               const mType = (m.type || "").toLowerCase();
+               const defCals = mType.includes("breakfast") ? 380 : mType.includes("lunch") ? 580 : mType.includes("dinner") ? 480 : 210;
+               cals += m.total_nutrition?.calories || m.calories || defCals;
+             }
           }
         });
       }
