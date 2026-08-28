@@ -27,3 +27,11 @@ export const endpoints = {
     auth: `${BACKEND_URL}/api/auth`,
     files: `${BACKEND_URL}/api/files`,
 };
+
+export const fetchWithCredentials = (url: string, options: RequestInit = {}): Promise<Response> => {
+  return fetch(url, {
+    ...options,
+    credentials: "include",
+  });
+};
+
