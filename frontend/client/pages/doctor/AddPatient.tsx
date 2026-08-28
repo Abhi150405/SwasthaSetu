@@ -231,7 +231,6 @@ export default function AddPatient() {
         method: "POST",
         credentials: "include",
         body: formData,
-        credentials: "include",
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
